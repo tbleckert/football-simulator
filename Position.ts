@@ -1,0 +1,60 @@
+export enum Position {
+    GK,
+    LB,
+    LCB,
+    CB,
+    RCB,
+    RB,
+    LWB,
+    LDM,
+    DM,
+    RDM,
+    RWB,
+    LM,
+    LCM,
+    CM,
+    RCM,
+    RM,
+    LW,
+    LCOM,
+    COM,
+    RCOM,
+    RW,
+    LF,
+    CF,
+    RF,
+    ST,
+}
+
+export const defencePositions = [
+    Position.LB,
+    Position.LCB,
+    Position.CB,
+    Position.RCB,
+    Position.RB,
+    Position.LWB,
+];
+
+export const midfieldPositions = [
+    Position.LDM,
+    Position.DM,
+    Position.RDM,
+    Position.RWB,
+    Position.LM,
+    Position.LCM,
+    Position.CM,
+    Position.RCM,
+    Position.RM,
+];
+
+export const attackPositions = [
+    Position.LW,
+    Position.LCOM,
+    Position.COM,
+    Position.RCOM,
+    Position.RW,
+    Position.LF,
+    Position.CF,
+    Position.RF,
+    Position.ST,
+];

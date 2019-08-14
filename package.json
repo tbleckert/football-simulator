@@ -1,0 +1,11 @@
+{
+  "name": "soccer-simulator",
+  "private": true,
+  "scripts": {
+    "start": "ts-node index.ts"
+  },
+  "devDependencies": {
+    "ts-node": "^8.3.0",
+    "typescript": "^3.5.3"
+  }
+}
