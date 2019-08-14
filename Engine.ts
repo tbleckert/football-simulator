@@ -9,13 +9,14 @@ import Player, {PlayerRating} from "./Player";
 import Reporter from "./Reporter";
 import { GoalType } from "./enums/GoalType";
 import { AssistType } from "./enums/AssistType";
+import { EventEmitter } from 'events';
 
-export default class Engine {
+export default class Engine extends EventEmitter {
     gameStarted: boolean = false;
     gameEnded: boolean = false;
     gameTime = 90;
     eventsPerMinute = 1;
-    gameSpeed = 1;
+    gameSpeed = 2000;
     homeTeamAdvantage = 2;
     ballPossession: Team | null = null;
     startedWithBall: Team | null = null;
@@ -28,6 +29,8 @@ export default class Engine {
     commentator: Commentator;
 
     constructor(homeTeam: Team, awayTeam: Team) {
+        super();
+
         this.homeTeam = homeTeam;
         this.awayTeam = awayTeam;
         this.commentator = new Commentator();
@@ -50,6 +53,13 @@ export default class Engine {
 
         this.gameStarted = true;
 
+        this.gameEvents.forEach(gameEvent => {
+            this.emit('comment', {
+                text: this.commentator.comment(gameEvent),
+                gameInfo: this.gameInfo,
+            });
+        });
+
         this.loop();
     }
 
@@ -59,11 +69,8 @@ export default class Engine {
 
     report() {
         const reporter = new Reporter(this.gameEvents);
-        console.log(reporter.getReport());
 
-        this.gameEvents.forEach(event => {
-            console.log(this.commentator.comment(event));
-        });
+        this.emit('report', reporter.getReport());
     }
 
     loop = () => {
@@ -73,14 +80,6 @@ export default class Engine {
             this.report();
 
             return;
-        }
-
-        if (event.value.event === Event.Goal) {
-            if (this.ballPossession === this.homeTeam) {
-                this.gameInfo.homeGoals += 1;
-            } else {
-                this.gameInfo.awayGoals += 1;
-            }
         }
 
         this.gameEvents.push(event.value);
@@ -121,7 +120,12 @@ export default class Engine {
             }
         }
 
-        this.loop();
+        this.emit('comment', {
+            text: this.commentator.comment(event.value),
+            gameInfo: this.gameInfo,
+        });
+
+        setTimeout(this.loop, this.gameSpeed);
     };
 
     * eventLoop() {
@@ -285,6 +289,12 @@ export default class Engine {
 
         if (event === Event.Goal) {
             [goalType, assist] = this.simulateGoalType(attackingPrimaryPlayer, attackingSecondaryPlayer);
+
+            if (this.ballPossession === this.homeTeam) {
+                this.gameInfo.homeGoals += 1;
+            } else {
+                this.gameInfo.awayGoals += 1;
+            }
         }
 
         return this.gameEvent(

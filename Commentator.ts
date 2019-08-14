@@ -23,7 +23,9 @@ export default class Commentator {
     }
 
     comment(event: GameEvent): string | null {
-        if (!(this.constructor as typeof Commentator).importantEvents.indexOf(event.event) && Math.random() < 0.3) {
+        const importantEvent = (this.constructor as typeof Commentator).importantEvents.indexOf(event.event) > -1;
+
+        if (!importantEvent && Math.random() > 0.5) {
             return null;
         }
 
