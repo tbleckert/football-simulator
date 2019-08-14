@@ -1,4 +1,4 @@
-export enum FieldAreas {
+export enum FieldArea {
     Defence,
     Midfield,
     Offense,

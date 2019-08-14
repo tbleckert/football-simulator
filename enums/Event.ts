@@ -13,4 +13,6 @@ export enum Event {
     EventLess,
     Advance,
     Retreat,
+    Corner,
+    FreeKick,
 }

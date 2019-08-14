@@ -1,8 +1,8 @@
 import Player, {PlayerRating} from './Player';
-import {defencePositions, midfieldPositions, Position} from './Position';
-import {FieldAreas} from "./Field";
-import {GameInfo} from "./GameInfo";
-import {Action} from "./Action";
+import {defencePositions, midfieldPositions, Position} from './enums/Position';
+import {FieldArea} from "./enums/FieldArea";
+import {GameInfo} from "./types/GameInfo";
+import {Action} from "./enums/Action";
 
 export interface TeamInterface {
     players: Player[];
@@ -87,10 +87,10 @@ export default class Team implements TeamInterface {
         return players.map(player => player.attackRating()).reduce((a, b) => a + b) / players.length;
     }
 
-    simulateMove(ballPosition: FieldAreas, gameInfo: GameInfo): Action {
+    simulateMove(ballPosition: FieldArea, gameInfo: GameInfo): Action {
         const random = Math.floor(Math.random() * (10 - 1 + 1) + 1);
 
-        if (ballPosition === FieldAreas.Offense) {
+        if (ballPosition === FieldArea.Offense) {
             if (random > 5) {
                 return Action.GoalAttempt;
             }
@@ -113,7 +113,7 @@ export default class Team implements TeamInterface {
         return Action.Retreat;
     }
 
-    getProbablePlayer(fieldPosition: FieldAreas, weights: Weights, exclude: Player[] = []): Player {
+    getProbablePlayer(fieldPosition: FieldArea, weights: Weights, exclude: Player[] = []): Player {
         const players: { weight: number, player: Player }[] = [];
 
         this.getFieldPlayers(exclude).forEach(player => {
@@ -132,19 +132,19 @@ export default class Team implements TeamInterface {
         return foundPlayers[Math.floor(Math.random() * foundPlayers.length)];
     }
 
-    attacker(fieldPosition: FieldAreas, exclude: Player[] = []): Player {
+    attacker(fieldPosition: FieldArea, exclude: Player[] = []): Player {
         const weights: Weights = {
-            [FieldAreas.Defence]: {
+            [FieldArea.Defence]: {
                 defenders: 0.6,
                 midfielders: 0.3,
                 attackers: 0.1,
             },
-            [FieldAreas.Midfield]: {
+            [FieldArea.Midfield]: {
                 defenders: 0.25,
                 midfielders: 0.5,
                 attackers: 0.25,
             },
-            [FieldAreas.Offense]: {
+            [FieldArea.Offense]: {
                 defenders: 0.1,
                 midfielders: 0.3,
                 attackers: 0.6,
@@ -154,19 +154,19 @@ export default class Team implements TeamInterface {
         return this.getProbablePlayer(fieldPosition, weights, exclude);
     }
 
-    defender(fieldPosition: FieldAreas, exclude: Player[] = []): Player {
+    defender(fieldPosition: FieldArea, exclude: Player[] = []): Player {
         const weights = {
-            [FieldAreas.Defence]: {
+            [FieldArea.Defence]: {
                 defenders: 0.1,
                 midfielders: 0.3,
                 attackers: 0.6,
             },
-            [FieldAreas.Midfield]: {
+            [FieldArea.Midfield]: {
                 defenders: 0.25,
                 midfielders: 0.5,
                 attackers: 0.25,
             },
-            [FieldAreas.Offense]: {
+            [FieldArea.Offense]: {
                 defenders: 0.6,
                 midfielders: 0.3,
                 attackers: 0.1,

@@ -1,6 +1,5 @@
-import {GameEvent} from './GameEvent';
-import {Event} from "./Event";
-import Player from "./Player";
+import { GameEvent } from './types/GameEvent';
+import { Event } from './enums/Event';
 
 export default class Reporter {
     gameEvents: GameEvent[];
@@ -10,13 +9,15 @@ export default class Reporter {
     }
 
     getReport() {
+        let homeGoals = 0;
+        let awayGoals = 0;
         let homePossession = 0;
         let awayPossession = 0;
         let homeShots = 0;
         let awayShots = 0;
         let homeShotsOnGoal = 0;
         let awayShotsOnGoal = 0;
-        const scoreSheet: { matchMinute: number, goalScorer: string | null, team: string }[] = [];
+        const scoreSheet: { matchMinute: number, goalScorer: string | null, assist: string | false, team: string }[] = [];
 
         this.gameEvents.forEach(gameEvent => {
             if (gameEvent.attackingTeam && gameEvent.attackingTeam.home) {
@@ -44,9 +45,16 @@ export default class Reporter {
             }
 
             if (gameEvent.event === Event.Goal) {
+                if (gameEvent.attackingTeam.home) {
+                    homeGoals += 1;
+                } else {
+                    awayGoals += 1;
+                }
+
                 scoreSheet.push({
                     matchMinute: gameEvent.gameInfo.matchMinute,
                     goalScorer: (gameEvent.attackingPrimaryPlayer) ? gameEvent.attackingPrimaryPlayer.info.name : null,
+                    assist: (gameEvent.assistType && gameEvent.attackingSecondaryPlayer) ? gameEvent.attackingSecondaryPlayer.info.name : false,
                     team: gameEvent.attackingTeam.name,
                 });
             }
@@ -55,6 +63,8 @@ export default class Reporter {
         const totalPossession = homePossession + awayPossession;
 
         return {
+            homeGoals,
+            awayGoals,
             homePossession: homePossession / totalPossession,
             awayPossession: awayPossession / totalPossession,
             homeShots,

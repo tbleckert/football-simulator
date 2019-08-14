@@ -1,5 +1,5 @@
 import Engine from './Engine';
-import { Position } from './Position';
+import { Position } from './enums/Position';
 import Team from './Team';
 import Player from './Player';
 import createPlayer from './data/createPlayer';

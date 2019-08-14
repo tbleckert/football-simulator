@@ -1,4 +1,4 @@
-import {Position} from './Position';
+import {Position} from './enums/Position';
 
 export interface PlayerInfo {
     name: string;

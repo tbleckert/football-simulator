@@ -1,5 +1,5 @@
-import { GameEvent } from './GameEvent';
-import { Event } from './Event';
+import { GameEvent } from './types/GameEvent';
+import { Event } from './enums/Event';
 import Team from "./Team";
 import Player from "./Player";
 
@@ -72,7 +72,7 @@ export default class Commentator {
     }
 
     save(event: GameEvent): string {
-        let comment = `${(event.data.shooter as Player).info.name} tries to score but the goalkeeper saves the ball.`;
+        let comment = `${(event.attackingPrimaryPlayer as Player).info.name} tries to score but the goalkeeper saves the ball.`;
 
         if (event.data === event.attackingTeam) {
             comment += ` ${event.attackingTeam.name} gets the ball back.`;
@@ -84,7 +84,7 @@ export default class Commentator {
     }
 
     block(event: GameEvent): string {
-        let comment = `${(event.data.shooter as Player).info.name} tries to score but the ball was blocked by the defence.`;
+        let comment = `${(event.attackingPrimaryPlayer as Player).info.name} tries to score but the ball was blocked by the defence.`;
 
         if (event.data === event.attackingTeam) {
             comment += ` ${event.attackingTeam.name} gets the ball back.`;
@@ -96,7 +96,7 @@ export default class Commentator {
     }
 
     goal(event: GameEvent): string {
-        return `${(event.data.goalScorer as Player).info.name} shoots and he scores! ${event.gameInfo.homeGoals}-${event.gameInfo.awayGoals}`;
+        return `${(event.attackingPrimaryPlayer as Player).info.name} shoots and he scores! ${event.gameInfo.homeGoals}-${event.gameInfo.awayGoals}`;
     }
 
     gameEnded(event: GameEvent): string {
