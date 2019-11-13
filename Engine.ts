@@ -6,34 +6,101 @@ import { FieldArea } from "./enums/FieldArea";
 import { Action } from "./enums/Action";
 import Commentator from "./Commentator";
 import Player, {PlayerRating} from "./Player";
-import Reporter from "./Reporter";
 import { GoalType } from "./enums/GoalType";
 import { AssistType } from "./enums/AssistType";
-import { EventEmitter } from 'events';
 
-export default class Engine extends EventEmitter {
+export default class Engine {
+    /**
+     * Has the game started?
+     */
     gameStarted: boolean = false;
+
+    /**
+     * Has the game ended?
+     */
     gameEnded: boolean = false;
+
+    /**
+     * Number of minutes for a full game
+     */
     gameTime = 90;
+
+    /**
+     * Number of events per minutes. This decides how eventful the game should be,
+     * how many actions can take place within a minute.
+     */
     eventsPerMinute = 1;
-    gameSpeed = 2000;
+
+    /**
+     * Extra rating points for home team attributes
+     */
     homeTeamAdvantage = 2;
+
+    /**
+     * All attributes are randomized on each simulation using
+     * a positive or negative version of this value
+     */
+    randomEffect = 15;
+
+    /**
+     * Chance (0 to 1) to get the ball back after goal attempt.
+     */
+    reboundChance = 0.3;
+
+    /**
+     * Increase attack attributes on goal chance
+     */
+    extraAttackOnChance = 0.05;
+
+    /**
+     * Current team with possession.
+     */
     ballPossession: Team | null = null;
+
+    /**
+     * The team that started with the ball.
+     */
     startedWithBall: Team | null = null;
+
+    /**
+     * FieldArea enum describing the current ball position.
+     */
     ballPosition: FieldArea = FieldArea.Midfield;
+
+    /**
+     * Game info object describing the current state of the game
+     */
     gameInfo: GameInfo;
+
+    /**
+     * Array containing all simulations
+     */
     gameEvents: GameEvent[] = [];
+
+    /**
+     * The game loop
+     */
     gameLoop: IterableIterator<GameEvent>;
+
+    /**
+     * The home team
+     */
     homeTeam: Team;
+
+    /**
+     * The away team
+     */
     awayTeam: Team;
+
+    /**
+     * The commentator
+     */
     commentator: Commentator;
 
-    constructor(homeTeam: Team, awayTeam: Team) {
-        super();
-
+    constructor(homeTeam: Team, awayTeam: Team, commentator: Commentator) {
         this.homeTeam = homeTeam;
         this.awayTeam = awayTeam;
-        this.commentator = new Commentator();
+        this.commentator = commentator;
         this.gameLoop = this.eventLoop();
         this.gameInfo = {
             matchMinute: 0,
@@ -46,71 +113,57 @@ export default class Engine extends EventEmitter {
         const coinflip = Math.floor(Math.random() * 2) == 0;
 
         this.ballPossession = (coinflip) ? this.homeTeam : this.awayTeam;
-        this.startedWithBall = (!coinflip) ? this.homeTeam : this.awayTeam;
+        this.startedWithBall = this.ballPossession;
 
         this.gameEvents.push(this.gameEvent(Event.GameStart, this.ballPossession));
         this.gameEvents.push(this.gameEvent(Event.Kickoff, this.ballPossession));
 
         this.gameStarted = true;
-
-        this.gameEvents.forEach(gameEvent => {
-            this.emit('comment', {
-                text: this.commentator.comment(gameEvent),
-                gameInfo: this.gameInfo,
-            });
-        });
-
-        this.loop();
     }
 
     teamWithoutBall(): Team {
         return (this.ballPossession === this.homeTeam) ? this.awayTeam : this.homeTeam;
     }
 
-    report() {
-        const reporter = new Reporter(this.gameEvents);
-
-        this.emit('report', reporter.getReport());
-    }
-
-    loop = () => {
+    simulate = () => {
         const event = this.gameLoop.next();
 
         if (event.done) {
-            this.report();
-
             return;
         }
 
         this.gameEvents.push(event.value);
+        this.simulate();
+    };
 
-        if (event.value.event === Event.Goal) {
+    handleEvent(event: GameEvent) {
+        if (event.event === Event.Goal) {
             this.ballPosition = FieldArea.Midfield;
             this.ballPossession = this.teamWithoutBall();
         }
 
-        if (event.value.event === Event.Save || event.value.event === Event.Block) {
-            const random = Math.floor(Math.random() * (4 - 1 + 1) + 1);
+        if (event.event === Event.Save || event.event === Event.Block) {
+            const random = Math.floor(Math.random());
 
-            if (random > 1) {
+            if (random > this.reboundChance) {
                 this.ballPossession = this.teamWithoutBall();
                 this.ballPosition = FieldArea.Defence;
             }
         }
 
-        if (event.value.event === Event.Advance) {
+        if (event.event === Event.Advance) {
             if (this.ballPosition !== FieldArea.Offense) {
                 this.ballPosition += 1;
             }
         }
 
-        if (event.value.event === Event.Retreat) {
+        if (event.event === Event.Retreat) {
             if (this.ballPosition !== FieldArea.Defence) {
                 this.ballPosition -= 1;
             }
         }
 
-        if (event.value.event === Event.Defence) {
+        if (event.event === Event.Defence) {
             this.ballPossession = this.teamWithoutBall();
 
             if (this.ballPosition === FieldArea.Offense) {
@@ -119,18 +172,11 @@ export default class Engine extends EventEmitter {
                 this.ballPosition = FieldArea.Offense;
             }
         }
-
-        this.emit('comment', {
-            text: this.commentator.comment(event.value),
-            gameInfo: this.gameInfo,
-        });
-
-        setTimeout(this.loop, this.gameSpeed);
-    };
+    }
 
     * eventLoop() {
         for (this.gameInfo.matchMinute; this.gameInfo.matchMinute <= this.gameTime; this.gameInfo.matchMinute += 1 / this.eventsPerMinute) {
-            yield this.simulate();
+            yield this.simulateEvent();
         }
     }
 
@@ -163,8 +209,8 @@ export default class Engine extends EventEmitter {
     }
 
     random(team: Team): number {
-        const min = -15;
-        const max = 15;
+        const min = -this.randomEffect;
+        const max = this.randomEffect;
         let random = Math.floor(Math.random() * (max - min + 1) + min);
 
         if (team === this.homeTeam) {
@@ -196,7 +242,7 @@ export default class Engine extends EventEmitter {
         if (action === Action.GoalAttempt) {
             const attack = attacker.attackRating() + this.homeTeamAdvantage;
 
-            if (attack + 5 > defence) {
+            if (attack + (attack * this.extraAttackOnChance) > defence) {
                 const goalkeeper = defendingTeam.goalkeeperRating() + this.random(defendingTeam);
 
                 if (attack > goalkeeper) {
@@ -256,8 +302,8 @@ export default class Engine extends EventEmitter {
         return [goalType, assistType];
     }
 
-    simulate(): GameEvent {
-        if (this.gameInfo.matchMinute == 45) {
+    simulateEvent(): GameEvent {
+        if (this.gameInfo.matchMinute == this.gameTime / 2) {
             this.ballPossession = this.teamWithoutBall();
             this.ballPosition = FieldArea.Midfield;
 

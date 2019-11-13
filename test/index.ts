@@ -1,7 +1,7 @@
 import http, { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import WebSocket from 'ws';
-import Engine from '../Engine';
+import Game from '../Game';
 import { Position } from '../enums/Position';
 import Team from '../Team';
 import Player from '../Player';
@@ -74,11 +74,18 @@ wss.on('connection', (ws) => {
         },
     }));
 
-    const game = new Engine(homeTeam, awayTeam);
+    const game = new Game(homeTeam, awayTeam);
 
     game.on('comment', (data) => {
         ws.send(JSON.stringify({
             event: 'comment',
+            data,
+        }));
+    });
+
+    game.on('event', (data) => {
+        ws.send(JSON.stringify({
+            event: 'event',
             data,
         }));
     });

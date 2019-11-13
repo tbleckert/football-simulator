@@ -18,8 +18,8 @@ export default class Commentator {
 
     name: string;
 
-    constructor() {
-        this.name = 'Mr. Commentator';
+    constructor(name: string = 'Mr. Commentator') {
+        this.name = name;
     }
 
     comment(event: GameEvent): string | null {
