@@ -3,8 +3,7 @@ import Team from './Team';
 import {GameEvent} from './types/GameEvent';
 import {GameInfo} from './types/GameInfo';
 import { FieldArea } from "./enums/FieldArea";
-import { Action } from "./enums/Action";
-import Commentator from "./Commentator";
+import { Action } from './enums/Action';
 import Player, {PlayerRating} from "./Player";
 import { GoalType } from "./enums/GoalType";
 import { AssistType } from "./enums/AssistType";
@@ -40,12 +39,12 @@ export default class Engine {
      * All attributes are randomized on each simulation using
      * a positive or negative version of this value
      */
-    randomEffect = 15;
+    randomEffect = 25;
 
     /**
      * Chance (0 to 1) to get the ball back after goal attempt.
      */
-    reboundChance = 0.3;
+    reboundChance = 0.1;
 
     /**
      * Increase attack attributes on goal chance
@@ -92,15 +91,9 @@ export default class Engine {
      */
     awayTeam: Team;
 
-    /**
-     * The commentator
-     */
-    commentator: Commentator;
-
-    constructor(homeTeam: Team, awayTeam: Team, commentator: Commentator) {
+    constructor(homeTeam: Team, awayTeam: Team) {
         this.homeTeam = homeTeam;
         this.awayTeam = awayTeam;
-        this.commentator = commentator;
         this.gameLoop = this.eventLoop();
         this.gameInfo = {
             matchMinute: 0,
@@ -126,6 +119,10 @@ export default class Engine {
     }
 
     simulate = () => {
+        if (!this.gameStarted) {
+            this.start();
+        }
+
         const event = this.gameLoop.next();
 
         if (event.done) {
@@ -133,6 +130,8 @@ export default class Engine {
         }
 
         this.gameEvents.push(event.value);
+        this.handleEvent(event.value);
+
         this.simulate();
     };
 
@@ -240,12 +239,13 @@ export default class Engine {
         }
 
         if (action === Action.GoalAttempt) {
-            const attack = attacker.attackRating() + this.homeTeamAdvantage;
+            const attack = attacker.attackRating() + this.random(attackingTeam);
 
             if (attack + (attack * this.extraAttackOnChance) > defence) {
                 const goalkeeper = defendingTeam.goalkeeperRating() + this.random(defendingTeam);
+                const attackerRating = attacker.attackRating() + this.random(attackingTeam);
 
-                if (attack > goalkeeper) {
+                if (attackerRating > goalkeeper) {
                     return Event.Goal;
                 }
 
@@ -304,7 +304,7 @@ export default class Engine {
 
     simulateEvent(): GameEvent {
         if (this.gameInfo.matchMinute == this.gameTime / 2) {
-            this.ballPossession = this.teamWithoutBall();
+            this.ballPossession = this.startedWithBall === this.homeTeam ? this.awayTeam : this.homeTeam;
             this.ballPosition = FieldArea.Midfield;
 
             return this.gameEvent(Event.HalfTime);

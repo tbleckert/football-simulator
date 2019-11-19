@@ -42,7 +42,7 @@ export default class Game extends EventEmitter {
         this.homeTeam = homeTeam;
         this.awayTeam = awayTeam;
         this.commentator = new Commentator();
-        this.engine = new Engine(this.homeTeam, this.awayTeam, this.commentator);
+        this.engine = new Engine(this.homeTeam, this.awayTeam);
     }
 
     start() {

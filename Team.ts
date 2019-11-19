@@ -88,7 +88,7 @@ export default class Team implements TeamInterface {
     }
 
     simulateMove(ballPosition: FieldArea, gameInfo: GameInfo): Action {
-        const random = Math.floor(Math.random() * (10 - 1 + 1) + 1);
+        const random = Math.floor(Math.random() * 11);
 
         if (ballPosition === FieldArea.Offense) {
             if (random > 5) {

@@ -2,7 +2,8 @@
   "name": "soccer-simulator",
   "private": true,
   "scripts": {
-    "start": "ts-node test/index.ts"
+    "start": "ts-node test/index.ts",
+    "test": "ts-node test/stresstest.ts"
   },
   "devDependencies": {
     "@types/node": "^12.7.1",

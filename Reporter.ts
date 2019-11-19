@@ -53,7 +53,7 @@ export default class Reporter {
 
                 scoreSheet.push({
                     matchMinute: gameEvent.gameInfo.matchMinute,
-                    goalScorer: (gameEvent.attackingPrimaryPlayer) ? gameEvent.attackingPrimaryPlayer.info.name : null,
+                    goalScorer: (gameEvent.attackingPrimaryPlayer) ? `${gameEvent.attackingPrimaryPlayer.info.number}. ${gameEvent.attackingPrimaryPlayer.info.name}` : null,
                     assist: (gameEvent.assistType && gameEvent.attackingSecondaryPlayer) ? gameEvent.attackingSecondaryPlayer.info.name : false,
                     team: gameEvent.attackingTeam.name,
                 });
