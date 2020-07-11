@@ -1,6 +1,6 @@
 {
   "name": "football-simulator",
-  "private": true,
+  "version": "0.0.1",
   "scripts": {
     "start": "ts-node test/index.ts",
     "test": "ts-node test/stresstest.ts"
