@@ -3,8 +3,8 @@ import { GameInfo } from './GameInfo';
 import Team from "../Team";
 import { FieldArea } from "../enums/FieldArea";
 import Player from "../Player";
-import {GoalType} from "../enums/GoalType";
-import {AssistType} from "../enums/AssistType";
+import { GoalType } from "../enums/GoalType";
+import { AssistType } from "../enums/AssistType";
 
 export interface GameEvent {
     event: Event;
