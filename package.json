@@ -1,5 +1,5 @@
 {
-  "name": "football-simulator",
+  "name": "@bleckert/football-simulator",
   "version": "0.0.1",
   "scripts": {
     "start": "ts-node test/index.ts",
