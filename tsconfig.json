@@ -9,8 +9,6 @@
   "exclude": [
     "data",
     "test",
-    "types",
-    "enums",
     "node_modules"
   ]
 }
