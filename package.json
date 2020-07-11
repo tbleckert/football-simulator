@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "scripts": {
     "start": "ts-node test/index.ts",
-    "test": "ts-node test/stresstest.ts"
+    "test": "ts-node test/stresstest.ts",
+    "build": "tsc"
   },
   "devDependencies": {
     "@types/node": "^12.7.1",
