@@ -1,5 +1,5 @@
 {
-  "name": "soccer-simulator",
+  "name": "football-simulator",
   "private": true,
   "scripts": {
     "start": "ts-node test/index.ts",
