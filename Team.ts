@@ -64,12 +64,12 @@ export default class Team implements TeamInterface {
     }
 
     averageRating(map: (player: Player) => number, players: Player[]|null = null): number {
-        const playersList = players || this.getFieldPlayers();
+        const playersList = (players) ? players : this.getFieldPlayers();
         return playersList.map(map).reduce((a, b) => a + b) / playersList.length;
     }
 
     goalkeeperRating(): number {
-        return this.averageRating(player => player.defenceRating(), this.getGoalkeepers());
+        return this.averageRating(player => player.ratingAverage(), this.getGoalkeepers());
     }
 
     defenceRating(): number {

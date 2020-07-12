@@ -1,55 +1,46 @@
-import { GameEvent } from './types/GameEvent';
-import { Event } from './enums/Event';
+import {GameEvent} from './types/GameEvent';
+import {Event} from './enums/Event';
 
 export default class Reporter {
     gameEvents: GameEvent[];
+    home = {
+        goals: 0,
+        possession: 0,
+        shots: 0,
+        shotsOnGoal: 0,
+    };
+
+    away = {
+        goals: 0,
+        possession: 0,
+        shots: 0,
+        shotsOnGoal: 0,
+    };
 
     constructor(gameEvents: GameEvent[]) {
         this.gameEvents = gameEvents;
     }
 
     getReport() {
-        let homeGoals = 0;
-        let awayGoals = 0;
-        let homePossession = 0;
-        let awayPossession = 0;
-        let homeShots = 0;
-        let awayShots = 0;
-        let homeShotsOnGoal = 0;
-        let awayShotsOnGoal = 0;
         const scoreSheet: { matchMinute: number, goalScorer: string | null, assist: string | false, team: string }[] = [];
 
         this.gameEvents.forEach(gameEvent => {
-            if (gameEvent.attackingTeam && gameEvent.attackingTeam.home) {
-                homePossession += 1;
-            } else {
-                awayPossession += 1;
-            }
+            const side = (gameEvent.attackingTeam && gameEvent.attackingTeam.home) ? 'home' : 'away';
 
-            if (gameEvent.event === Event.Goal || gameEvent.event === Event.Save) {
-                if (gameEvent.attackingTeam.home) {
-                    homeShots += 1;
-                    homeShotsOnGoal += 1;
-                } else {
-                    awayShots += 1;
-                    awayShotsOnGoal += 1;
-                }
+            this[side].possession += 1;
+
+            if ([Event.Save, Event.Block].includes(gameEvent.event)) {
+                this[side].shots += 1;
             }
 
             if (gameEvent.event === Event.Block) {
-                if (gameEvent.attackingTeam.home) {
-                    homeShots += 1;
-                } else {
-                    awayShots += 1;
-                }
+                this[side].shotsOnGoal += 1;
             }
 
             if (gameEvent.event === Event.Goal) {
-                if (gameEvent.attackingTeam.home) {
-                    homeGoals += 1;
-                } else {
-                    awayGoals += 1;
-                }
+                this[side].goals += 1;
+                this[side].shots += 1;
+                this[side].shotsOnGoal += 1;
 
                 scoreSheet.push({
                     matchMinute: gameEvent.gameInfo.matchMinute,
@@ -60,17 +51,14 @@ export default class Reporter {
             }
         });
 
-        const totalPossession = homePossession + awayPossession;
+        const totalPossession = this.home.possession + this.away.possession;
+
+        this.home.possession = this.home.possession / totalPossession;
+        this.away.possession = this.away.possession / totalPossession;
 
         return {
-            homeGoals,
-            awayGoals,
-            homePossession: homePossession / totalPossession,
-            awayPossession: awayPossession / totalPossession,
-            homeShots,
-            homeShotsOnGoal,
-            awayShots,
-            awayShotsOnGoal,
+            home: this.home,
+            away: this.away,
             scoreSheet,
         };
     }

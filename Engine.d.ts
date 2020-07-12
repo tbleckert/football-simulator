@@ -78,11 +78,14 @@ export default class Engine {
     start(): void;
     teamWithoutBall(): Team;
     simulate: () => void;
+    rebound(): boolean;
     handleEvent(event: GameEvent): void;
     eventLoop(): IterableIterator<GameEvent>;
     gameEvent(event: Event, data?: any, attackingPrimaryPlayer?: Player | null, attackingSecondaryPlayer?: Player | null, defendingPrimaryPlayer?: Player | null, defendingSecondaryPlayer?: Player | null, goalType?: GoalType | null, assistType?: AssistType | null): GameEvent;
     random(team: Team): number;
     simulateAction(action: Action, attacker: Player): Event;
     simulateGoalType(primaryPlayer: Player, secondaryPlayer: Player): [GoalType, AssistType | null];
+    halfTime(): GameEvent;
+    gameEnd(): GameEvent;
     simulateEvent(): GameEvent;
 }

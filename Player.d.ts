@@ -92,6 +92,9 @@ export default class Player implements PlayerInterface {
     constructor(info: PlayerInfo, biometrics: PlayerBiometrics, attributes: PlayerAttributes, position: Position);
     ratingAverage(): number;
     rating(): PlayerRating | GoalkeeperRating;
+    averageRating(ratings: number[]): number;
+    defenceRating(): number;
+    possessionRating(): number;
     attackRating(): number;
     attributesAverage(...attributes: number[]): number;
 }

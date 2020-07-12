@@ -51,12 +51,12 @@ for (let i = 0; i < totalGames; i += 1) {
     results.push(report.getReport());
 }
 
-const homeTeamWins = results.filter((report) => report.homeGoals > report.awayGoals).length;
-const awayTeamWins = results.filter((report) => report.homeGoals < report.awayGoals).length;
-const totalHomeGoals = results.map((report) => report.homeGoals).reduce((acc, current) => acc + current);
-const totalAwayGoals = results.map((report) => report.awayGoals).reduce((acc, current) => acc + current);
-const totalHomeShots = results.map((report) => report.homeShots).reduce((acc, current) => acc + current);
-const totalAwayShots = results.map((report) => report.awayShots).reduce((acc, current) => acc + current);
+const homeTeamWins = results.filter((report) => report.home.goals > report.away.goals).length;
+const awayTeamWins = results.filter((report) => report.home.goals < report.away.goals).length;
+const totalHomeGoals = results.map((report) => report.home.goals).reduce((acc, current) => acc + current);
+const totalAwayGoals = results.map((report) => report.away.goals).reduce((acc, current) => acc + current);
+const totalHomeShots = results.map((report) => report.home.shots).reduce((acc, current) => acc + current);
+const totalAwayShots = results.map((report) => report.away.shots).reduce((acc, current) => acc + current);
 const homeGoalScorers: {
     [name: string]: number,
 } = {};

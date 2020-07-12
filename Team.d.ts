@@ -5,13 +5,6 @@ import { Action } from "./enums/Action";
 export interface TeamInterface {
     players: Player[];
 }
-interface Weights {
-    [x: number]: {
-        defenders: number;
-        midfielders: number;
-        attackers: number;
-    };
-}
 export default class Team implements TeamInterface {
     players: Player[];
     home: boolean;
@@ -24,13 +17,13 @@ export default class Team implements TeamInterface {
     };
     getGoalkeepers(): Player[];
     getFieldPlayers(exclude?: Player[]): Player[];
+    averageRating(map: (player: Player) => number, players?: Player[] | null): number;
     goalkeeperRating(): number;
     defenceRating(): number;
     possessionRating(): number;
     attackRating(): number;
     simulateMove(ballPosition: FieldArea, gameInfo: GameInfo): Action;
-    getProbablePlayer(fieldPosition: FieldArea, weights: Weights, exclude?: Player[]): Player;
+    getProbablePlayer(fieldPosition: FieldArea, attacker: boolean, exclude?: Player[]): Player;
     attacker(fieldPosition: FieldArea, exclude?: Player[]): Player;
     defender(fieldPosition: FieldArea, exclude?: Player[]): Player;
 }
-export {};
