@@ -135,6 +135,10 @@ export default class Engine {
         this.simulate();
     };
 
+    rebound(): boolean {
+        return Math.floor(Math.random()) > this.reboundChance;
+    }
+
     handleEvent(event: GameEvent) {
         switch (event.event) {
             case Event.Goal:
@@ -144,9 +148,7 @@ export default class Engine {
                 break;
             case Event.Save:
             case Event.Block:
-                const random = Math.floor(Math.random());
-
-                if (random > this.reboundChance) {
+                if (!this.rebound()) {
                     this.ballPossession = this.teamWithoutBall();
                     this.ballPosition = FieldArea.Defence;
                 }
