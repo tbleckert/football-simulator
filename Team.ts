@@ -3,6 +3,7 @@ import { defencePositions, midfieldPositions, Position } from './enums/Position'
 import { FieldArea } from "./enums/FieldArea";
 import { GameInfo } from "./types/GameInfo";
 import { Action } from "./enums/Action";
+import getRandomElement from "./lib/getRandomElement";
 
 export interface TeamInterface {
     players: Player[];
@@ -85,29 +86,15 @@ export default class Team implements TeamInterface {
     }
 
     simulateMove(ballPosition: FieldArea, gameInfo: GameInfo): Action {
-        const random = Math.floor(Math.random() * 11);
-
         if (ballPosition === FieldArea.Offense) {
-            if (random > 5) {
-                return Action.GoalAttempt;
-            }
+            const options = [[Action.GoalAttempt, 50], [Action.Stay, 35], [Action.Retreat, 15]];
 
-            if (random > 3) {
-                return Action.Stay;
-            }
-
-            return Action.Retreat;
+            return getRandomElement(options);
         }
 
-        if (random > 6) {
-            return Action.Advance;
-        }
+        const options = [[Action.Advance, 50], [Action.Stay, 35], [Action.Retreat, 15]];
 
-        if (random > 3) {
-            return Action.Stay;
-        }
-
-        return Action.Retreat;
+        return getRandomElement(options);
     }
 
     getProbablePlayer(fieldPosition: FieldArea, attacker: boolean, exclude: Player[] = []): Player {
