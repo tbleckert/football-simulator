@@ -85,6 +85,7 @@ export default class Engine {
     gameEvent(event: Event, data?: any, attackingPrimaryPlayer?: Player | null, attackingSecondaryPlayer?: Player | null, defendingPrimaryPlayer?: Player | null, defendingSecondaryPlayer?: Player | null, goalType?: GoalType | null, assistType?: AssistType | null): GameEvent;
     random(team: Team): number;
     simulateAction(action: Action, attacker: Player): Event;
+    simulateAssistType(secondaryPlayer: Player): AssistType | null;
     simulateGoalType(primaryPlayer: Player, secondaryPlayer: Player): [GoalType, AssistType | null];
     halfTime(): GameEvent;
     gameEnd(): GameEvent;

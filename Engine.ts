@@ -260,29 +260,37 @@ export default class Engine {
         return (action === Action.Retreat) ? Event.Retreat : Event.Possession;
     }
 
-    simulateGoalType(primaryPlayer: Player, secondaryPlayer: Player): [GoalType, AssistType | null] {
-        const primaryPlayerAttributes = primaryPlayer.attributes;
+    simulateAssistType(secondaryPlayer: Player): AssistType | null {
+        const random = Math.random();
         const secondaryPlayerAttributes = secondaryPlayer.attributes;
         const secondaryPlayerRating = secondaryPlayer.rating();
+        const shooting = (secondaryPlayerRating as PlayerRating).shooting;
+        const passing = (secondaryPlayerRating as PlayerRating).passing;
+
+        if (shooting > passing && random > 0.5) {
+            return (random > 0.5) ? AssistType.Deflection : AssistType.Rebound;
+        }
+
+        if (secondaryPlayerAttributes.passing > secondaryPlayerAttributes.crossing && random > 0.5) {
+            return AssistType.Pass;
+        }
+
+        return AssistType.Cross;
+    }
+
+    simulateGoalType(primaryPlayer: Player, secondaryPlayer: Player): [GoalType, AssistType | null] {
         const assist = Math.random() > 0.5;
 
         if (!assist) {
             return [GoalType.Shot, null];
         }
 
+        const primaryPlayerAttributes = primaryPlayer.attributes;
         const random = Math.random();
-        let assistType = null;
-
-        if ((secondaryPlayerRating as PlayerRating).shooting > (secondaryPlayerRating as PlayerRating).passing && random > 0.5) {
-            assistType = (random > 0.5) ? AssistType.Deflection : AssistType.Rebound;
-        } else if (secondaryPlayerAttributes.passing > secondaryPlayerAttributes.crossing && random > 0.5) {
-            return [GoalType.Shot, AssistType.Pass];
-        } else {
-            assistType = AssistType.Cross;
-        }
+        const assistType = this.simulateAssistType(secondaryPlayer);
 
         return [
-            (primaryPlayerAttributes.heading > primaryPlayerAttributes.finishing && random > 0.5) ? GoalType.Header : GoalType.Volley,
+            (primaryPlayerAttributes.heading > primaryPlayerAttributes.finishing && random > 0.5) ? GoalType.Header : [GoalType.Volley, GoalType.Shot][Math.floor(Math.random() * 2)],
             assistType,
         ];
     }
