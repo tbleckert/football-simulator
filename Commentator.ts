@@ -73,28 +73,20 @@ export default class Commentator {
         return `${event.defendingTeam.name} tries to advance but good defence by ${event.attackingTeam.name} that steals the ball.`;
     }
 
-    save(event: GameEvent): string {
-        let comment = `${(event.attackingPrimaryPlayer as Player).info.name} tries to score but the goalkeeper saves the ball.`;
-
+    rebound(comment: string, event: GameEvent): string {
         if (event.data === event.attackingTeam) {
-            comment += ` ${event.attackingTeam.name} gets the ball back.`;
-        } else {
-            comment += ` ${event.attackingTeam.name} can take control over the ball.`;
+            return `${event.attackingTeam.name} gets the ball back.`;
         }
 
-        return comment;
+        return [comment, `${event.attackingTeam.name} can take control over the ball.`].join(' ');
+    }
+
+    save(event: GameEvent): string {
+        return this.rebound(`${(event.attackingPrimaryPlayer as Player).info.name} tries to score but the goalkeeper saves the ball.`, event);
     }
 
     block(event: GameEvent): string {
-        let comment = `${(event.attackingPrimaryPlayer as Player).info.name} tries to score but the ball was blocked by the defence.`;
-
-        if (event.data === event.attackingTeam) {
-            comment += ` ${event.attackingTeam.name} gets the ball back.`;
-        } else {
-            comment += ` ${event.attackingTeam.name} can take control over the ball.`;
-        }
-
-        return comment;
+        return this.rebound(`${(event.attackingPrimaryPlayer as Player).info.name} tries to score but the ball was blocked by the defence.`, event);
     }
 
     goal(event: GameEvent): string {
@@ -104,7 +96,9 @@ export default class Commentator {
     gameEnded(event: GameEvent): string {
         if (event.gameInfo.homeGoals > event.gameInfo.awayGoals) {
             return `The game has ended! ${event.homeTeam.name} wins ${event.gameInfo.homeGoals}-${event.gameInfo.awayGoals}`;
-        } else if (event.gameInfo.homeGoals < event.gameInfo.awayGoals) {
+        }
+
+        if (event.gameInfo.homeGoals < event.gameInfo.awayGoals) {
             return `The game has ended! ${event.awayTeam.name} takes 3 points on the road! ${event.gameInfo.homeGoals}-${event.gameInfo.awayGoals}`;
         }
 

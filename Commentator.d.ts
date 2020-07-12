@@ -10,6 +10,7 @@ export default class Commentator {
     halfTime(event: GameEvent): string;
     advance(event: GameEvent): string;
     defence(event: GameEvent): string;
+    rebound(comment: string, event: GameEvent): string;
     save(event: GameEvent): string;
     block(event: GameEvent): string;
     goal(event: GameEvent): string;
