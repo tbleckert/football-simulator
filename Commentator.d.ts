@@ -1,9 +1,8 @@
 import { GameEvent } from './types/GameEvent';
-import { Event } from './enums/Event';
 export default class Commentator {
-    static importantEvents: Event[];
     name: string;
     constructor(name?: string);
+    routeComment(event: GameEvent): string | null;
     comment(event: GameEvent): string | null;
     gameStarted(event: GameEvent): string;
     kickoff(event: GameEvent): string;

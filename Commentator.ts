@@ -1,34 +1,28 @@
 import { GameEvent } from './types/GameEvent';
 import { Event } from './enums/Event';
-import Team from "./Team";
-import Player from "./Player";
+import Team from './Team';
+import Player from './Player';
+
+const importantEvents = [
+    Event.GameStart,
+    Event.Kickoff,
+    Event.HalfTime,
+    Event.Advance,
+    Event.Save,
+    Event.Block,
+    Event.Goal,
+    Event.GameEnd,
+    Event.Injury,
+];
 
 export default class Commentator {
-    static importantEvents = [
-        Event.GameStart,
-        Event.Kickoff,
-        Event.HalfTime,
-        Event.Advance,
-        Event.Save,
-        Event.Block,
-        Event.Goal,
-        Event.GameEnd,
-        Event.Injury,
-    ];
-
     name: string;
 
     constructor(name: string = 'Mr. Commentator') {
         this.name = name;
     }
 
-    comment(event: GameEvent): string | null {
-        const importantEvent = (this.constructor as typeof Commentator).importantEvents.indexOf(event.event) > -1;
-
-        if (!importantEvent && Math.random() > 0.5) {
-            return null;
-        }
-
+    routeComment(event: GameEvent): string | null {
         switch (event.event) {
             case Event.GameStart:
                 return this.gameStarted(event);
@@ -51,6 +45,16 @@ export default class Commentator {
             default:
                 return null;
         }
+    }
+
+    comment(event: GameEvent): string | null {
+        const importantEvent = event.event in importantEvents;
+
+        if (!importantEvent && Math.random() > 0.5) {
+            return null;
+        }
+
+        return this.routeComment(event);
     }
 
     gameStarted(event: GameEvent): string {
