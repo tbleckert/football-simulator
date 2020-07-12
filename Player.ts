@@ -226,16 +226,40 @@ export default class Player implements PlayerInterface {
         };
     }
 
+    averageRating(ratings: number[]): number {
+        return ratings.reduce((acc, curr) => acc + curr) / ratings.length;
+    }
+
+    defenceRating(): number {
+        const rating = this.rating();
+
+        return this.averageRating([
+            (rating as PlayerRating).defending,
+            (rating as PlayerRating).physique,
+            (rating as PlayerRating).pace,
+        ]);
+    }
+
+    possessionRating(): number {
+        const rating = this.rating();
+
+        return this.averageRating([
+            (rating as PlayerRating).dribbling,
+            (rating as PlayerRating).passing,
+            (rating as PlayerRating).physique,
+        ]);
+    }
+
     attackRating(): number {
         const rating = this.rating();
 
-        return (
-            (rating as PlayerRating).dribbling
-            + (rating as PlayerRating).pace
-            + (rating as PlayerRating).passing
-            + (rating as PlayerRating).shooting
-            + (rating as PlayerRating).physique
-        ) / 5;
+        return this.averageRating([
+            (rating as PlayerRating).dribbling,
+            (rating as PlayerRating).pace,
+            (rating as PlayerRating).passing,
+            (rating as PlayerRating).shooting,
+            (rating as PlayerRating).physique,
+        ]);
     }
 
     attributesAverage(...attributes: number[]): number {

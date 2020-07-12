@@ -76,29 +76,13 @@ export default class Team implements TeamInterface {
     defenceRating(): number {
         const players = this.getFieldPlayers();
 
-        return players.map(player => {
-            const rating = player.rating();
-
-            return (
-                (rating as PlayerRating).defending
-                + (rating as PlayerRating).physique
-                + (rating as PlayerRating).pace
-            ) / 3;
-        }).reduce((a, b) => a + b) / players.length;
+        return players.map(player => player.defenceRating()).reduce((a, b) => a + b) / players.length;
     }
 
     possessionRating(): number {
         const players = this.getFieldPlayers();
 
-        return players.map(player => {
-            const rating = player.rating();
-
-            return (
-                (rating as PlayerRating).dribbling
-                + (rating as PlayerRating).passing
-                + (rating as PlayerRating).physique
-            ) / 3;
-        }).reduce((a, b) => a + b) / players.length;
+        return players.map(player => player.possessionRating()).reduce((a, b) => a + b) / players.length;
     }
 
     attackRating(): number {
@@ -133,7 +117,8 @@ export default class Team implements TeamInterface {
         return Action.Retreat;
     }
 
-    getProbablePlayer(fieldPosition: FieldArea, weights: Weights, exclude: Player[] = []): Player {
+    getProbablePlayer(fieldPosition: FieldArea, attacker: boolean, exclude: Player[] = []): Player {
+        const weights = createWeights(attacker);
         const players: { weight: number, player: Player }[] = [];
 
         this.getFieldPlayers(exclude).forEach(player => {
@@ -153,14 +138,10 @@ export default class Team implements TeamInterface {
     }
 
     attacker(fieldPosition: FieldArea, exclude: Player[] = []): Player {
-        const weights = createWeights(true);
-
-        return this.getProbablePlayer(fieldPosition, weights, exclude);
+        return this.getProbablePlayer(fieldPosition, true, exclude);
     }
 
     defender(fieldPosition: FieldArea, exclude: Player[] = []): Player {
-        const weights = createWeights(false);
-
-        return this.getProbablePlayer(fieldPosition, weights, exclude);
+        return this.getProbablePlayer(fieldPosition, false, exclude);
     }
 }
