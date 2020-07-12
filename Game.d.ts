@@ -29,7 +29,7 @@ export default class Game extends EventEmitter {
      * Events copy
      */
     events: GameEvent[];
-    constructor(homeTeam: Team, awayTeam: Team);
+    constructor(homeTeam: Team, awayTeam: Team, commentator: Commentator);
     start(): void;
     simulate(): void;
     loop: () => void;

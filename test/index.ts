@@ -6,6 +6,7 @@ import { Position } from '../enums/Position';
 import Team from '../Team';
 import Player from '../Player';
 import createPlayer from '../data/createPlayer';
+import Commentator from "../Commentator";
 
 const homePlayers: Player[] = [
     createPlayer(Position.GK),
@@ -37,6 +38,7 @@ const awayPlayers: Player[] = [
 
 const homeTeam = new Team(true, 'Juventus', homePlayers);
 const awayTeam = new Team(false, 'Milan', awayPlayers);
+const commentator = new Commentator();
 
 const requestHandler: http.RequestListener = (request: IncomingMessage, response: ServerResponse) => {
     if (request.url !== '/') {
@@ -74,7 +76,7 @@ wss.on('connection', (ws) => {
         },
     }));
 
-    const game = new Game(homeTeam, awayTeam);
+    const game = new Game(homeTeam, awayTeam, commentator);
 
     game.on('comment', (data) => {
         ws.send(JSON.stringify({

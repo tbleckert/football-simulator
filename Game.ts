@@ -36,12 +36,12 @@ export default class Game extends EventEmitter {
      */
     events: GameEvent[] = [];
 
-    constructor(homeTeam: Team, awayTeam: Team) {
+    constructor(homeTeam: Team, awayTeam: Team, commentator: Commentator) {
         super();
 
         this.homeTeam = homeTeam;
         this.awayTeam = awayTeam;
-        this.commentator = new Commentator();
+        this.commentator = commentator;
         this.engine = new Engine(this.homeTeam, this.awayTeam);
     }
 
