@@ -1,8 +1,8 @@
-import Player, {PlayerRating} from './Player';
-import {defencePositions, midfieldPositions, Position} from './enums/Position';
-import {FieldArea} from "./enums/FieldArea";
-import {GameInfo} from "./types/GameInfo";
-import {Action} from "./enums/Action";
+import Player, { PlayerRating } from './Player';
+import { defencePositions, midfieldPositions, Position } from './enums/Position';
+import { FieldArea } from "./enums/FieldArea";
+import { GameInfo } from "./types/GameInfo";
+import { Action } from "./enums/Action";
 
 export interface TeamInterface {
     players: Player[];
@@ -14,6 +14,26 @@ interface Weights {
         midfielders: number;
         attackers: number;
     }
+}
+
+function createWeights(attacker = false): Weights {
+    return {
+        [FieldArea.Defence]: {
+            defenders: (attacker) ? 0.6 : 0.1,
+            midfielders: 0.3,
+            attackers: (attacker) ? 0.1 : 0.6,
+        },
+        [FieldArea.Midfield]: {
+            defenders: 0.25,
+            midfielders: 0.5,
+            attackers: 0.25,
+        },
+        [FieldArea.Offense]: {
+            defenders: (attacker) ? 0.1 : 0.6,
+            midfielders: 0.3,
+            attackers: (attacker) ? 0.6 : 0.1,
+        }
+    };
 }
 
 export default class Team implements TeamInterface {
@@ -133,45 +153,13 @@ export default class Team implements TeamInterface {
     }
 
     attacker(fieldPosition: FieldArea, exclude: Player[] = []): Player {
-        const weights: Weights = {
-            [FieldArea.Defence]: {
-                defenders: 0.6,
-                midfielders: 0.3,
-                attackers: 0.1,
-            },
-            [FieldArea.Midfield]: {
-                defenders: 0.25,
-                midfielders: 0.5,
-                attackers: 0.25,
-            },
-            [FieldArea.Offense]: {
-                defenders: 0.1,
-                midfielders: 0.3,
-                attackers: 0.6,
-            }
-        };
+        const weights = createWeights(true);
 
         return this.getProbablePlayer(fieldPosition, weights, exclude);
     }
 
     defender(fieldPosition: FieldArea, exclude: Player[] = []): Player {
-        const weights = {
-            [FieldArea.Defence]: {
-                defenders: 0.1,
-                midfielders: 0.3,
-                attackers: 0.6,
-            },
-            [FieldArea.Midfield]: {
-                defenders: 0.25,
-                midfielders: 0.5,
-                attackers: 0.25,
-            },
-            [FieldArea.Offense]: {
-                defenders: 0.6,
-                midfielders: 0.3,
-                attackers: 0.1,
-            }
-        };
+        const weights = createWeights(false);
 
         return this.getProbablePlayer(fieldPosition, weights, exclude);
     }

@@ -1,12 +1,12 @@
-import { Event } from './enums/Event';
+import {Event} from './enums/Event';
 import Team from './Team';
 import {GameEvent} from './types/GameEvent';
 import {GameInfo} from './types/GameInfo';
-import { FieldArea } from "./enums/FieldArea";
-import { Action } from './enums/Action';
+import {FieldArea} from "./enums/FieldArea";
+import {Action} from './enums/Action';
 import Player, {PlayerRating} from "./Player";
-import { GoalType } from "./enums/GoalType";
-import { AssistType } from "./enums/AssistType";
+import {GoalType} from "./enums/GoalType";
+import {AssistType} from "./enums/AssistType";
 
 export default class Engine {
     /**
@@ -136,40 +136,40 @@ export default class Engine {
     };
 
     handleEvent(event: GameEvent) {
-        if (event.event === Event.Goal) {
-            this.ballPosition = FieldArea.Midfield;
-            this.ballPossession = this.teamWithoutBall();
-        }
-
-        if (event.event === Event.Save || event.event === Event.Block) {
-            const random = Math.floor(Math.random());
-
-            if (random > this.reboundChance) {
+        switch (event.event) {
+            case Event.Goal:
+                this.ballPosition = FieldArea.Midfield;
                 this.ballPossession = this.teamWithoutBall();
-                this.ballPosition = FieldArea.Defence;
-            }
-        }
 
-        if (event.event === Event.Advance) {
-            if (this.ballPosition !== FieldArea.Offense) {
-                this.ballPosition += 1;
-            }
-        }
+                break;
+            case Event.Save:
+            case Event.Block:
+                const random = Math.floor(Math.random());
 
-        if (event.event === Event.Retreat) {
-            if (this.ballPosition !== FieldArea.Defence) {
-                this.ballPosition -= 1;
-            }
-        }
+                if (random > this.reboundChance) {
+                    this.ballPossession = this.teamWithoutBall();
+                    this.ballPosition = FieldArea.Defence;
+                }
 
-        if (event.event === Event.Defence) {
-            this.ballPossession = this.teamWithoutBall();
+                break;
+            case Event.Advance:
+                this.ballPosition = Math.min(this.ballPosition + 1, FieldArea.Offense);
 
-            if (this.ballPosition === FieldArea.Offense) {
-                this.ballPosition = FieldArea.Defence;
-            } else if (this.ballPosition === FieldArea.Defence) {
-                this.ballPosition = FieldArea.Offense;
-            }
+                break;
+            case Event.Retreat:
+                this.ballPosition = Math.max(this.ballPosition - 1, FieldArea.Defence);
+
+                break;
+            case Event.Defence:
+                this.ballPossession = this.teamWithoutBall();
+
+                if (this.ballPosition === FieldArea.Offense) {
+                    this.ballPosition = FieldArea.Defence;
+                } else if (this.ballPosition === FieldArea.Defence) {
+                    this.ballPosition = FieldArea.Offense;
+                }
+
+                break;
         }
     }
 
@@ -227,29 +227,18 @@ export default class Engine {
         const attackingTeam = this.ballPossession;
         const defendingTeam = this.teamWithoutBall();
         const defence = defendingTeam.defenceRating() + this.random(defendingTeam);
+        const attack = attackingTeam.attackRating() + this.random(attackingTeam);
 
         if (action === Action.Advance) {
-            const attack = attackingTeam.attackRating() + this.random(attackingTeam);
-
-            if (attack > defence) {
-                return Event.Advance;
-            }
-
-            return Event.Defence;
+            return (attack > defence) ? Event.Advance : Event.Defence;
         }
 
         if (action === Action.GoalAttempt) {
-            const attack = attacker.attackRating() + this.random(attackingTeam);
-
             if (attack + (attack * this.extraAttackOnChance) > defence) {
                 const goalkeeper = defendingTeam.goalkeeperRating() + this.random(defendingTeam);
                 const attackerRating = attacker.attackRating() + this.random(attackingTeam);
 
-                if (attackerRating > goalkeeper) {
-                    return Event.Goal;
-                }
-
-                return Event.Save;
+                return (attackerRating > goalkeeper) ? Event.Goal : Event.Save;
             }
 
             return Event.Block;
@@ -261,11 +250,7 @@ export default class Engine {
             return Event.Defence;
         }
 
-        if (action === Action.Retreat) {
-            return Event.Retreat;
-        }
-
-        return Event.Possession;
+        return (action === Action.Retreat) ? Event.Retreat : Event.Possession;
     }
 
     simulateGoalType(primaryPlayer: Player, secondaryPlayer: Player): [GoalType, AssistType | null] {
@@ -283,23 +268,16 @@ export default class Engine {
 
         if ((secondaryPlayerRating as PlayerRating).shooting > (secondaryPlayerRating as PlayerRating).passing && random > 0.5) {
             assistType = (random > 0.5) ? AssistType.Deflection : AssistType.Rebound;
+        } else if (secondaryPlayerAttributes.passing > secondaryPlayerAttributes.crossing && random > 0.5) {
+            return [GoalType.Shot, AssistType.Pass];
         } else {
-            if (secondaryPlayerAttributes.passing > secondaryPlayerAttributes.crossing && random > 0.5) {
-                assistType = AssistType.Pass;
-            } else {
-                assistType = AssistType.Cross;
-            }
+            assistType = AssistType.Cross;
         }
 
-        let goalType = null;
-
-        if (assistType === AssistType.Pass) {
-            goalType = GoalType.Shot;
-        } else {
-            goalType = (primaryPlayerAttributes.heading > primaryPlayerAttributes.finishing && random > 0.5) ? GoalType.Header : GoalType.Volley;
-        }
-
-        return [goalType, assistType];
+        return [
+            (primaryPlayerAttributes.heading > primaryPlayerAttributes.finishing && random > 0.5) ? GoalType.Header : GoalType.Volley,
+            assistType,
+        ];
     }
 
     simulateEvent(): GameEvent {
@@ -328,10 +306,7 @@ export default class Engine {
         const action = this.ballPossession.simulateMove(this.ballPosition, this.gameInfo);
         let goalType = null;
         let assist = null;
-        const event = this.simulateAction(
-            action,
-            attackingPrimaryPlayer,
-        );
+        const event = this.simulateAction(action, attackingPrimaryPlayer);
 
         if (event === Event.Goal) {
             [goalType, assist] = this.simulateGoalType(attackingPrimaryPlayer, attackingSecondaryPlayer);
