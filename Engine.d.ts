@@ -79,6 +79,7 @@ export default class Engine {
     teamWithoutBall(): Team;
     simulate: () => void;
     rebound(): boolean;
+    reverseSide(current: FieldArea): FieldArea;
     handleEvent(event: GameEvent): void;
     eventLoop(): IterableIterator<GameEvent>;
     gameEvent(event: Event, data?: any, attackingPrimaryPlayer?: Player | null, attackingSecondaryPlayer?: Player | null, defendingPrimaryPlayer?: Player | null, defendingSecondaryPlayer?: Player | null, goalType?: GoalType | null, assistType?: AssistType | null): GameEvent;
@@ -87,5 +88,6 @@ export default class Engine {
     simulateGoalType(primaryPlayer: Player, secondaryPlayer: Player): [GoalType, AssistType | null];
     halfTime(): GameEvent;
     gameEnd(): GameEvent;
+    goal(attackingPrimaryPlayer: Player, attackingSecondaryPlayer: Player): [GoalType, AssistType | null];
     simulateEvent(): GameEvent;
 }

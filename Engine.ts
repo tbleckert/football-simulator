@@ -139,6 +139,16 @@ export default class Engine {
         return Math.floor(Math.random()) > this.reboundChance;
     }
 
+    reverseSide(current: FieldArea): FieldArea {
+        const map = {
+            [FieldArea.Offense]: FieldArea.Defence,
+            [FieldArea.Midfield]: FieldArea.Midfield,
+            [FieldArea.Defence]: FieldArea.Offense,
+        };
+
+        return map[current];
+    }
+
     handleEvent(event: GameEvent) {
         switch (event.event) {
             case Event.Goal:
@@ -164,12 +174,7 @@ export default class Engine {
                 break;
             case Event.Defence:
                 this.ballPossession = this.teamWithoutBall();
-
-                if (this.ballPosition === FieldArea.Offense) {
-                    this.ballPosition = FieldArea.Defence;
-                } else if (this.ballPosition === FieldArea.Defence) {
-                    this.ballPosition = FieldArea.Offense;
-                }
+                this.ballPosition = this.reverseSide(this.ballPosition);
 
                 break;
         }
@@ -295,37 +300,32 @@ export default class Engine {
         return this.gameEvent(Event.GameEnd);
     }
 
+    goal(attackingPrimaryPlayer: Player, attackingSecondaryPlayer: Player): [GoalType, AssistType | null] {
+        if (this.ballPossession === this.homeTeam) {
+            this.gameInfo.homeGoals += 1;
+        } else {
+            this.gameInfo.awayGoals += 1;
+        }
+
+        return this.simulateGoalType(attackingPrimaryPlayer, attackingSecondaryPlayer);
+    }
+
     simulateEvent(): GameEvent {
-        if (this.gameInfo.matchMinute == this.gameTime / 2) {
-            return this.halfTime();
-        }
-
-        if (this.gameInfo.matchMinute >= this.gameTime) {
-            return this.gameEnd();
-        }
-
-        if (!this.ballPossession) {
-            return this.gameEvent(Event.EventLess);
-        }
+        if (this.gameInfo.matchMinute == this.gameTime / 2) return this.halfTime();
+        if (this.gameInfo.matchMinute >= this.gameTime) return this.gameEnd();
+        if (!this.ballPossession) return this.gameEvent(Event.EventLess);
 
         const attackingPrimaryPlayer = this.ballPossession.attacker(this.ballPosition);
         const attackingSecondaryPlayer = this.ballPossession.attacker(this.ballPosition, [attackingPrimaryPlayer]);
         const defendingTeam = this.teamWithoutBall();
         const defendingPrimaryPlayer = defendingTeam.defender(this.ballPosition);
-        const defendingSecondaryPlayer = defendingTeam.defender(this.ballPosition, [defendingPrimaryPlayer]);
         const action = this.ballPossession.simulateMove(this.ballPosition, this.gameInfo);
         let goalType = null;
         let assist = null;
         const event = this.simulateAction(action, attackingPrimaryPlayer);
 
         if (event === Event.Goal) {
-            [goalType, assist] = this.simulateGoalType(attackingPrimaryPlayer, attackingSecondaryPlayer);
-
-            if (this.ballPossession === this.homeTeam) {
-                this.gameInfo.homeGoals += 1;
-            } else {
-                this.gameInfo.awayGoals += 1;
-            }
+            [goalType, assist] = this.goal(attackingPrimaryPlayer, attackingSecondaryPlayer);
         }
 
         return this.gameEvent(
@@ -334,7 +334,7 @@ export default class Engine {
             attackingPrimaryPlayer,
             attackingSecondaryPlayer,
             defendingPrimaryPlayer,
-            defendingSecondaryPlayer,
+            defendingTeam.defender(this.ballPosition, [defendingPrimaryPlayer]),
             goalType,
             assist,
         );
