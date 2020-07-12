@@ -226,6 +226,31 @@ export default class Engine {
         return random;
     }
 
+    simulateGoalAttempt(attackingTeam: Team, defendingTeam: Team, attacker: Player): Event {
+        const defence = defendingTeam.defenceRating() + this.random(defendingTeam);
+        const attack = attackingTeam.attackRating() + this.random(attackingTeam);
+
+        if (attack + (attack * this.extraAttackOnChance) > defence) {
+            const goalkeeper = defendingTeam.goalkeeperRating() + this.random(defendingTeam);
+            const attackerRating = attacker.attackRating() + this.random(attackingTeam);
+
+            return (attackerRating > goalkeeper) ? Event.Goal : Event.Save;
+        }
+
+        return Event.Block;
+    }
+
+    simulatePossession(attackingTeam: Team, defendingTeam: Team, action: Action): Event {
+        const defence = defendingTeam.defenceRating() + this.random(defendingTeam);
+        const possession = attackingTeam.possessionRating() + this.random(attackingTeam);
+
+        if (defence > possession) {
+            return Event.Defence;
+        }
+
+        return (action === Action.Retreat) ? Event.Retreat : Event.Possession;
+    }
+
     simulateAction(action: Action, attacker: Player): Event {
         if (!this.ballPossession) {
             return Event.EventLess;
@@ -241,23 +266,10 @@ export default class Engine {
         }
 
         if (action === Action.GoalAttempt) {
-            if (attack + (attack * this.extraAttackOnChance) > defence) {
-                const goalkeeper = defendingTeam.goalkeeperRating() + this.random(defendingTeam);
-                const attackerRating = attacker.attackRating() + this.random(attackingTeam);
-
-                return (attackerRating > goalkeeper) ? Event.Goal : Event.Save;
-            }
-
-            return Event.Block;
+            return this.simulateGoalAttempt(attackingTeam, defendingTeam, attacker);
         }
 
-        const possession = attackingTeam.possessionRating() + this.random(attackingTeam);
-
-        if (defence > possession) {
-            return Event.Defence;
-        }
-
-        return (action === Action.Retreat) ? Event.Retreat : Event.Possession;
+        return this.simulatePossession(attackingTeam, defendingTeam, action);
     }
 
     simulateAssistType(secondaryPlayer: Player): AssistType | null {

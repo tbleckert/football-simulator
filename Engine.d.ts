@@ -84,6 +84,8 @@ export default class Engine {
     eventLoop(): IterableIterator<GameEvent>;
     gameEvent(event: Event, data?: any, attackingPrimaryPlayer?: Player | null, attackingSecondaryPlayer?: Player | null, defendingPrimaryPlayer?: Player | null, defendingSecondaryPlayer?: Player | null, goalType?: GoalType | null, assistType?: AssistType | null): GameEvent;
     random(team: Team): number;
+    simulateGoalAttempt(attackingTeam: Team, defendingTeam: Team, attacker: Player): Event;
+    simulatePossession(attackingTeam: Team, defendingTeam: Team, action: Action): Event;
     simulateAction(action: Action, attacker: Player): Event;
     simulateAssistType(secondaryPlayer: Player): AssistType | null;
     simulateGoalType(primaryPlayer: Player, secondaryPlayer: Player): [GoalType, AssistType | null];
