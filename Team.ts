@@ -63,32 +63,25 @@ export default class Team implements TeamInterface {
         return this.players.filter(player => player.position !== Position.GK).filter(player => !exclude.length ||exclude.indexOf(player) < 0);
     }
 
+    averageRating(map: (player: Player) => number, players: Player[]|null = null): number {
+        const playersList = players || this.getFieldPlayers();
+        return playersList.map(map).reduce((a, b) => a + b) / playersList.length;
+    }
+
     goalkeeperRating(): number {
-        const goalkeepers = this.getGoalkeepers();
-
-        if (!goalkeepers.length) {
-            return 0;
-        }
-
-        return goalkeepers.map(player => player.ratingAverage()).reduce((a, b) => a + b) / goalkeepers.length;
+        return this.averageRating(player => player.defenceRating(), this.getGoalkeepers());
     }
 
     defenceRating(): number {
-        const players = this.getFieldPlayers();
-
-        return players.map(player => player.defenceRating()).reduce((a, b) => a + b) / players.length;
+        return this.averageRating(player => player.defenceRating());
     }
 
     possessionRating(): number {
-        const players = this.getFieldPlayers();
-
-        return players.map(player => player.possessionRating()).reduce((a, b) => a + b) / players.length;
+        return this.averageRating(player => player.possessionRating());
     }
 
     attackRating(): number {
-        const players = this.getFieldPlayers();
-
-        return players.map(player => player.attackRating()).reduce((a, b) => a + b) / players.length;
+        return this.averageRating(player => player.attackRating());
     }
 
     simulateMove(ballPosition: FieldArea, gameInfo: GameInfo): Action {
