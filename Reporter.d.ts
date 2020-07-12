@@ -1,4 +1,6 @@
 import { GameEvent } from './types/GameEvent';
+import Player from "./Player";
+import Team from "./Team";
 export default class Reporter {
     gameEvents: GameEvent[];
     home: {
@@ -13,25 +15,32 @@ export default class Reporter {
         shots: number;
         shotsOnGoal: number;
     };
+    scoreSheet: {
+        matchMinute: number;
+        goalScorer: Player | null;
+        assist: Player | false;
+        team: Team;
+    }[];
     constructor(gameEvents: GameEvent[]);
+    registerEvent: (gameEvent: GameEvent) => void;
     getReport(): {
         home: {
-            goals: number;
             possession: number;
+            goals: number;
             shots: number;
             shotsOnGoal: number;
         };
         away: {
-            goals: number;
             possession: number;
+            goals: number;
             shots: number;
             shotsOnGoal: number;
         };
         scoreSheet: {
             matchMinute: number;
-            goalScorer: string | null;
-            assist: string | false;
-            team: string;
+            goalScorer: Player | null;
+            assist: false | Player;
+            team: Team;
         }[];
     };
 }

@@ -62,19 +62,15 @@ const homeGoalScorers: {
 } = {};
 
 results.forEach((report) => {
-    const scorers = report.scoreSheet.filter((item) => item.team === 'Home');
+    const scorers = report.scoreSheet.filter((item) => item.team.home);
 
     scorers.forEach((item) => {
         if (!item.goalScorer) {
             return;
         }
 
-        let [number, name] = item.goalScorer.split('. ');
-        const player = homeTeam.players.filter((player) => player.info.number === parseInt(number, 10));
-
-        if (player.length) {
-            name = `${number}. ${name} (${Position[player[0].position]})`;
-        }
+        const goalScorer: Player = item.goalScorer;
+        const name = `${goalScorer.info.number}. ${goalScorer.info.name} (${Position[goalScorer.position]})`;
 
         if (!(name in homeGoalScorers)) {
             homeGoalScorers[name] = 0;
@@ -89,19 +85,15 @@ const awayGoalScorers: {
 } = {};
 
 results.forEach((report) => {
-    const scorers = report.scoreSheet.filter((item) => item.team === 'Away');
+    const scorers = report.scoreSheet.filter((item) => !item.team.home);
 
     scorers.forEach((item) => {
         if (!item.goalScorer) {
             return;
         }
 
-        let [number, name] = item.goalScorer.split('. ');
-        const player = awayTeam.players.filter((player) => player.info.number === parseInt(number, 10));
-
-        if (player.length) {
-            name = `${number}. ${name} (${Position[player[0].position]})`;
-        }
+        const goalScorer: Player = item.goalScorer;
+        const name = `${goalScorer.info.number}. ${goalScorer.info.name} (${Position[goalScorer.position]})`;
 
         if (!(name in awayGoalScorers)) {
             awayGoalScorers[name] = 0;

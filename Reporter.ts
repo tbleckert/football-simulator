@@ -1,5 +1,7 @@
 import {GameEvent} from './types/GameEvent';
 import {Event} from './enums/Event';
+import Player from "./Player";
+import Team from "./Team";
 
 export default class Reporter {
     gameEvents: GameEvent[];
@@ -17,49 +19,46 @@ export default class Reporter {
         shotsOnGoal: 0,
     };
 
+    scoreSheet: { matchMinute: number, goalScorer: Player | null, assist: Player | false, team: Team }[] = [];
+
     constructor(gameEvents: GameEvent[]) {
         this.gameEvents = gameEvents;
     }
 
+    registerEvent = (gameEvent: GameEvent): void => {
+        const side = (gameEvent.attackingTeam && gameEvent.attackingTeam.home) ? 'home' : 'away';
+
+        this[side].possession += 1;
+
+        if ([Event.Save, Event.Goal, Event.Block].includes(gameEvent.event)) {
+            this[side].shots += 1;
+        }
+
+        if ([Event.Save, Event.Goal].includes(gameEvent.event)) {
+            this[side].shotsOnGoal += 1;
+        }
+
+        if (gameEvent.event === Event.Goal) {
+            this[side].goals += 1;
+
+            this.scoreSheet.push({
+                matchMinute: gameEvent.gameInfo.matchMinute,
+                goalScorer: gameEvent.attackingPrimaryPlayer,
+                assist: (gameEvent.assistType && gameEvent.attackingSecondaryPlayer) ? gameEvent.attackingSecondaryPlayer : false,
+                team: gameEvent.attackingTeam,
+            });
+        }
+    };
+
     getReport() {
-        const scoreSheet: { matchMinute: number, goalScorer: string | null, assist: string | false, team: string }[] = [];
-
-        this.gameEvents.forEach(gameEvent => {
-            const side = (gameEvent.attackingTeam && gameEvent.attackingTeam.home) ? 'home' : 'away';
-
-            this[side].possession += 1;
-
-            if ([Event.Save, Event.Block].includes(gameEvent.event)) {
-                this[side].shots += 1;
-            }
-
-            if (gameEvent.event === Event.Block) {
-                this[side].shotsOnGoal += 1;
-            }
-
-            if (gameEvent.event === Event.Goal) {
-                this[side].goals += 1;
-                this[side].shots += 1;
-                this[side].shotsOnGoal += 1;
-
-                scoreSheet.push({
-                    matchMinute: gameEvent.gameInfo.matchMinute,
-                    goalScorer: (gameEvent.attackingPrimaryPlayer) ? `${gameEvent.attackingPrimaryPlayer.info.number}. ${gameEvent.attackingPrimaryPlayer.info.name}` : null,
-                    assist: (gameEvent.assistType && gameEvent.attackingSecondaryPlayer) ? gameEvent.attackingSecondaryPlayer.info.name : false,
-                    team: gameEvent.attackingTeam.name,
-                });
-            }
-        });
+        this.gameEvents.forEach(this.registerEvent);
 
         const totalPossession = this.home.possession + this.away.possession;
 
-        this.home.possession = this.home.possession / totalPossession;
-        this.away.possession = this.away.possession / totalPossession;
-
         return {
-            home: this.home,
-            away: this.away,
-            scoreSheet,
+            home: { ...this.home, possession: this.home.possession / totalPossession },
+            away: { ...this.away, possession: this.away.possession / totalPossession },
+            scoreSheet: this.scoreSheet,
         };
     }
 }
