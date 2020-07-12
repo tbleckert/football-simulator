@@ -282,18 +282,26 @@ export default class Engine {
         ];
     }
 
+    halfTime(): GameEvent {
+        this.ballPossession = this.startedWithBall === this.homeTeam ? this.awayTeam : this.homeTeam;
+        this.ballPosition = FieldArea.Midfield;
+
+        return this.gameEvent(Event.HalfTime);
+    }
+
+    gameEnd(): GameEvent {
+        this.gameEnded = true;
+
+        return this.gameEvent(Event.GameEnd);
+    }
+
     simulateEvent(): GameEvent {
         if (this.gameInfo.matchMinute == this.gameTime / 2) {
-            this.ballPossession = this.startedWithBall === this.homeTeam ? this.awayTeam : this.homeTeam;
-            this.ballPosition = FieldArea.Midfield;
-
-            return this.gameEvent(Event.HalfTime);
+            return this.halfTime();
         }
 
         if (this.gameInfo.matchMinute >= this.gameTime) {
-            this.gameEnded = true;
-
-            return this.gameEvent(Event.GameEnd);
+            return this.gameEnd();
         }
 
         if (!this.ballPossession) {
