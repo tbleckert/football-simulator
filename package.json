@@ -1,6 +1,6 @@
 {
   "name": "@bleckert/football-simulator",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "scripts": {
     "start": "ts-node test/index.ts",
     "test": "ts-node test/stresstest.ts",
