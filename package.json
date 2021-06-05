@@ -13,6 +13,7 @@
     "typescript": "^3.5.3"
   },
   "dependencies": {
+    "events": "^3.3.0",
     "ws": "^7.1.2"
   }
 }
