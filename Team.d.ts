@@ -1,6 +1,6 @@
-import Player from './Player';
+import type Player from './Player';
 import { FieldArea } from "./enums/FieldArea";
-import { GameInfo } from "./types/GameInfo";
+import type { GameInfo } from "./types/GameInfo";
 import { Action } from "./enums/Action";
 export interface TeamInterface {
     players: Player[];

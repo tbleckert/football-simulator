@@ -4,7 +4,7 @@ import WebSocket from 'ws';
 import Game from '../Game';
 import { Position } from '../enums/Position';
 import Team from '../Team';
-import Player from '../Player';
+import type Player from '../Player';
 import createPlayer from '../data/createPlayer';
 import Commentator from "../Commentator";
 

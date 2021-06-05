@@ -1,7 +1,7 @@
-import Player, { PlayerRating } from './Player';
+import type Player from './Player';
 import { defencePositions, midfieldPositions, Position } from './enums/Position';
 import { FieldArea } from "./enums/FieldArea";
-import { GameInfo } from "./types/GameInfo";
+import type { GameInfo } from "./types/GameInfo";
 import { Action } from "./enums/Action";
 import getRandomElement from "./lib/getRandomElement";
 

@@ -1,4 +1,4 @@
-import { GameEvent } from './types/GameEvent';
+import type { GameEvent } from './types/GameEvent';
 export default class Commentator {
     name: string;
     constructor(name?: string);

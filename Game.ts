@@ -1,6 +1,6 @@
-import Team from './Team';
-import { GameEvent } from './types/GameEvent';
-import Commentator from './Commentator';
+import type Team from './Team';
+import type { GameEvent } from './types/GameEvent';
+import type Commentator from './Commentator';
 import { EventEmitter } from 'events';
 import Engine from './Engine';
 import Reporter from './Reporter';

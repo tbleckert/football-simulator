@@ -1,10 +1,11 @@
 import {Event} from './enums/Event';
-import Team from './Team';
-import {GameEvent} from './types/GameEvent';
-import {GameInfo} from './types/GameInfo';
+import type Team from './Team';
+import type {GameEvent} from './types/GameEvent';
+import type {GameInfo} from './types/GameInfo';
 import {FieldArea} from "./enums/FieldArea";
 import {Action} from './enums/Action';
-import Player, {PlayerRating} from "./Player";
+import type Player from "./Player";
+import type {PlayerRating} from "./Player";
 import {GoalType} from "./enums/GoalType";
 import {AssistType} from "./enums/AssistType";
 

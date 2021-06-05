@@ -1,10 +1,10 @@
-import { Event } from '../enums/Event';
-import { GameInfo } from './GameInfo';
-import Team from "../Team";
-import { FieldArea } from "../enums/FieldArea";
-import Player from "../Player";
-import { GoalType } from "../enums/GoalType";
-import { AssistType } from "../enums/AssistType";
+import type { Event } from '../enums/Event';
+import type { GameInfo } from './GameInfo';
+import type Team from '../Team';
+import type { FieldArea } from '../enums/FieldArea';
+import type Player from '../Player';
+import type { GoalType } from '../enums/GoalType';
+import type { AssistType } from '../enums/AssistType';
 
 export interface GameEvent {
     event: Event;

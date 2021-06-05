@@ -1,7 +1,7 @@
-import { GameEvent } from './types/GameEvent';
+import type { GameEvent } from './types/GameEvent';
 import { Event } from './enums/Event';
-import Team from './Team';
-import Player from './Player';
+import type Team from './Team';
+import type Player from './Player';
 
 const importantEvents = [
     Event.GameStart,
