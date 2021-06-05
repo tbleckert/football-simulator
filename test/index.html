@@ -2,6 +2,33 @@
 <html>
     <head>
         <title>Soccer simulator</title>
+        <link rel="preconnect" href="https://fonts.gstatic.com">
+        <link href="https://fonts.googleapis.com/css2?family=Inter&family=JetBrains+Mono:wght@800&display=swap" rel="stylesheet">
+        <style>
+            body {
+                font-family: 'Inter', sans-serif;
+            }
+
+            .mono {
+                font-family: 'JetBrains Mono', monospace;
+            }
+
+            .comments {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                height: 600px;
+                overflow: auto;
+            }
+
+            .comments li {
+                padding: 1em;
+            }
+
+            .comments li:nth-child(odd) {
+                background: #F6F4FFFF;
+            }
+        </style>
         <script>
             class Ws {
                 constructor() {
@@ -69,8 +96,18 @@
         </script>
     </head>
     <body>
-        <ul id="commentator"></ul>
+        <span class="mono" id="minute">'0</span>
+        <h1>
+            <span class="mono" id="homeScore">0</span>
+            <span class="mono">-</span>
+            <span class="mono" id="awayScore">0</span>
+        </h1>
+        <ul id="commentator" class="comments"></ul>
         <script>
+            const minute = document.getElementById('minute');
+            const homeScore = document.getElementById('homeScore');
+            const awayScore = document.getElementById('awayScore');
+
             function addComment(comment) {
                 if (!comment.text) {
                     return;
@@ -103,6 +140,16 @@
 
             ws.on('comment', (data) => {
                 addComment(data);
+            });
+
+            ws.on('event', (data) => {
+                homeScore.innerHTML = data.gameInfo.homeGoals;
+                awayScore.innerHTML = data.gameInfo.awayGoals;
+                minute.innerHTML = data.gameInfo.matchMinute;
+            });
+
+            ws.on('report', (data) => {
+                console.log(data);
             });
         </script>
     </body>

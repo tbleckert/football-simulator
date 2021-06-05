@@ -54,8 +54,8 @@ const requestHandler: http.RequestListener = (request: IncomingMessage, response
 
 const server = http.createServer(requestHandler);
 
-server.listen(3000, () => {
-    console.log('server is listening on port 3000');
+server.listen(3005, () => {
+    console.log('server is listening on port 3005');
 });
 
 const wss = new WebSocket.Server({ port: 8080 });
