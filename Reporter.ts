@@ -1,25 +1,24 @@
-import type {GameEvent} from './types/GameEvent';
-import {Event} from './enums/Event';
-import type Player from "./Player";
-import type Team from "./Team";
+import type { GameEvent } from './types/GameEvent';
+import { Event } from './enums/Event';
+import type {Report, ScoreSheet, TeamReport} from "./types/Report";
 
 export default class Reporter {
     gameEvents: GameEvent[];
-    home = {
+    home: TeamReport = {
         goals: 0,
         possession: 0,
         shots: 0,
         shotsOnGoal: 0,
     };
 
-    away = {
+    away: TeamReport = {
         goals: 0,
         possession: 0,
         shots: 0,
         shotsOnGoal: 0,
     };
 
-    scoreSheet: { matchMinute: number, goalScorer: Player | null, assist: Player | false, team: Team }[] = [];
+    scoreSheet: ScoreSheet = [];
 
     constructor(gameEvents: GameEvent[]) {
         this.gameEvents = gameEvents;
@@ -50,7 +49,7 @@ export default class Reporter {
         }
     };
 
-    getReport() {
+    getReport(): Report {
         this.gameEvents.forEach(this.registerEvent);
 
         const totalPossession = this.home.possession + this.away.possession;
