@@ -1,6 +1,6 @@
 {
   "name": "@bleckert/football-simulator",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "scripts": {
     "start": "node --loader ts-node/esm --experimental-specifier-resolution=node test/index.ts",
