@@ -7,6 +7,7 @@ import { Action } from './enums/Action';
 import type Player from "./Player";
 import { GoalType } from "./enums/GoalType";
 import { AssistType } from "./enums/AssistType";
+import Field from "./Field";
 export default class Engine {
     /**
      * Has the game started?
@@ -74,12 +75,15 @@ export default class Engine {
      * The away team
      */
     awayTeam: Team;
+    /**
+     * The field
+     */
+    field: Field;
     constructor(homeTeam: Team, awayTeam: Team);
     start(): void;
     teamWithoutBall(): Team;
     simulate: () => void;
     rebound(): boolean;
-    reverseSide(current: FieldArea): FieldArea;
     handleEvent(event: GameEvent): void;
     eventLoop(): Generator<GameEvent, void, unknown>;
     gameEvent(event: Event, data?: any, attackingPrimaryPlayer?: Player | null, attackingSecondaryPlayer?: Player | null, defendingPrimaryPlayer?: Player | null, defendingSecondaryPlayer?: Player | null, goalType?: GoalType | null, assistType?: AssistType | null): GameEvent;

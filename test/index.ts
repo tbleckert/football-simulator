@@ -1,12 +1,11 @@
-import http, { IncomingMessage, ServerResponse } from 'http';
+import http, {IncomingMessage, ServerResponse} from 'http';
 import fs from 'fs';
 import WebSocket from 'ws';
-import Game from '../Game';
-import { Position } from '../enums/Position';
+import {Position} from '../enums/Position';
 import Team from '../Team';
 import type Player from '../Player';
 import createPlayer from '../data/createPlayer';
-import Commentator from "../Commentator";
+import Engine from "../Engine";
 
 const homePlayers: Player[] = [
     createPlayer(Position.GK),
@@ -38,7 +37,6 @@ const awayPlayers: Player[] = [
 
 const homeTeam = new Team(true, 'Juventus', homePlayers);
 const awayTeam = new Team(false, 'Milan', awayPlayers);
-const commentator = new Commentator();
 
 const requestHandler: http.RequestListener = (request: IncomingMessage, response: ServerResponse) => {
     if (request.url !== '/') {
@@ -68,36 +66,16 @@ const broadcast = (data: any) => {
 };
 
 wss.on('connection', (ws) => {
+    const engine = new Engine(homeTeam, awayTeam);
+
+    engine.simulate();
+
     ws.send(JSON.stringify({
-        event: 'teams',
+        event: 'events',
         data: {
             home: homeTeam,
             away: awayTeam,
+            events: engine.gameEvents,
         },
     }));
-
-    const game = new Game(homeTeam, awayTeam, commentator);
-
-    game.on('comment', (data) => {
-        ws.send(JSON.stringify({
-            event: 'comment',
-            data,
-        }));
-    });
-
-    game.on('event', (data) => {
-        ws.send(JSON.stringify({
-            event: 'event',
-            data,
-        }));
-    });
-
-    game.on('report', (data) => {
-        ws.send(JSON.stringify({
-            event: 'report',
-            data,
-        }));
-    });
-
-    game.start();
 });

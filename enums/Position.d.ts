@@ -28,3 +28,6 @@ export declare enum Position {
 export declare const defencePositions: Position[];
 export declare const midfieldPositions: Position[];
 export declare const attackPositions: Position[];
+export declare const leftPositions: Position[];
+export declare const centerPositions: Position[];
+export declare const rightPositions: Position[];
