@@ -1,1 +1,1 @@
-export default function getRandomElement(options: number[][]): number;
+export default function getRandomElement(options: number[][] | [string, number][]): number;

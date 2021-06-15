@@ -238,19 +238,6 @@
                 createTeamLineup(data.away);
             });
 
-            ws.on('event', (data) => {
-                homeScore.innerHTML = data.gameInfo.homeGoals;
-                awayScore.innerHTML = data.gameInfo.awayGoals;
-                minute.innerHTML = data.gameInfo.matchMinute;
-
-                const area = document.getElementById(data.fieldPosition);
-
-                area.parentNode.querySelector('.ball').classList.remove('ball', 'home', 'away');
-
-                area.classList.add('ball');
-                area.classList.add((data.attackingTeam.home) ? 'home' : 'away');
-            });
-
             ws.on('report', (data) => {
                 console.log(data);
             });

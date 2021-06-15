@@ -2,7 +2,7 @@ import { Event } from './enums/Event';
 import type Team from './Team';
 import type { GameEvent } from './types/GameEvent';
 import type { GameInfo } from './types/GameInfo';
-import { FieldArea } from "./enums/FieldArea";
+import type { FieldArea } from "./enums/FieldArea";
 import { Action } from './enums/Action';
 import type Player from "./Player";
 import { GoalType } from "./enums/GoalType";

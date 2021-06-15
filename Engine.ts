@@ -2,7 +2,7 @@ import {Event} from './enums/Event';
 import type Team from './Team';
 import type {GameEvent} from './types/GameEvent';
 import type {GameInfo} from './types/GameInfo';
-import {FieldArea} from "./enums/FieldArea";
+import type { FieldArea } from "./enums/FieldArea";
 import {Action} from './enums/Action';
 import type Player from "./Player";
 import type { PlayerRating } from "./Player";
@@ -110,8 +110,8 @@ export default class Engine {
             awayGoals: 0,
         };
 
-        this.homeTeam.setEngine(this);
-        this.awayTeam.setEngine(this);
+        this.homeTeam.setField(this.field);
+        this.awayTeam.setField(this.field);
     }
 
     start() {
@@ -161,14 +161,12 @@ export default class Engine {
             case Event.Save:
                 if (!this.rebound()) {
                     this.ballPossession = this.teamWithoutBall();
-                    this.ballPosition = FieldArea.DefensiveCenter;
                 }
 
                 break;
             case Event.Block:
                 if (!this.rebound()) {
                     this.ballPossession = this.teamWithoutBall();
-                    this.ballPosition = this.field.reverseSide(this.ballPosition);
                 }
 
                 break;
@@ -182,7 +180,6 @@ export default class Engine {
                 break;
             case Event.Defence:
                 this.ballPossession = this.teamWithoutBall();
-                this.ballPosition = this.field.reverseSide(this.ballPosition);
 
                 break;
         }
@@ -343,11 +340,12 @@ export default class Engine {
         if (this.gameInfo.matchMinute >= this.gameTime) return this.gameEnd();
         if (!this.ballPossession) return this.gameEvent(Event.EventLess);
 
-        const attackingPrimaryPlayer = this.ballPossession.attacker(this.ballPosition);
-        const attackingSecondaryPlayer = this.ballPossession.attacker(this.ballPosition, [attackingPrimaryPlayer]);
+        const ballPosition = (this.ballPossession.home) ? this.ballPosition : this.field.reverseSide(this.ballPosition);
+        const attackingPrimaryPlayer = this.ballPossession.attacker(ballPosition);
+        const attackingSecondaryPlayer = this.ballPossession.attacker(ballPosition, [attackingPrimaryPlayer]);
         const defendingTeam = this.teamWithoutBall();
-        const defendingPrimaryPlayer = defendingTeam.defender(this.ballPosition);
-        const action = this.ballPossession.simulateMove(this.ballPosition, this.gameInfo);
+        const defendingPrimaryPlayer = defendingTeam.defender(ballPosition);
+        const action = this.ballPossession.simulateMove(ballPosition, this.gameInfo);
         let goalType = null;
         let assist = null;
         const event = this.simulateAction(action, attackingPrimaryPlayer);
@@ -362,7 +360,7 @@ export default class Engine {
             attackingPrimaryPlayer,
             attackingSecondaryPlayer,
             defendingPrimaryPlayer,
-            defendingTeam.defender(this.ballPosition, [defendingPrimaryPlayer]),
+            defendingTeam.defender(ballPosition, [defendingPrimaryPlayer]),
             goalType,
             assist,
         );
