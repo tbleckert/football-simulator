@@ -1,9 +1,17 @@
 import type Player from './Player';
-import { defencePositions, midfieldPositions, Position } from './enums/Position';
-import { FieldArea } from "./enums/FieldArea";
-import type { GameInfo } from "./types/GameInfo";
-import { Action } from "./enums/Action";
+import {
+    attackPositions,
+    centerPositions,
+    defencePositions,
+    leftPositions,
+    midfieldPositions,
+    Position, rightPositions
+} from './enums/Position';
+import {FieldArea} from "./enums/FieldArea";
+import type {GameInfo} from "./types/GameInfo";
+import {Action} from "./enums/Action";
 import getRandomElement from "./lib/getRandomElement";
+import type Field from "./Field";
 
 export interface TeamInterface {
     players: Player[];
@@ -11,41 +19,82 @@ export interface TeamInterface {
 
 interface Weights {
     [x: number]: {
-        defenders: number;
-        midfielders: number;
-        attackers: number;
-    }
-}
-
-function createWeights(attacker = false): Weights {
-    return {
-        [FieldArea.Defence]: {
-            defenders: (attacker) ? 0.6 : 0.1,
-            midfielders: 0.3,
-            attackers: (attacker) ? 0.1 : 0.6,
-        },
-        [FieldArea.Midfield]: {
-            defenders: 0.25,
-            midfielders: 0.5,
-            attackers: 0.25,
-        },
-        [FieldArea.Offense]: {
-            defenders: (attacker) ? 0.1 : 0.6,
-            midfielders: 0.3,
-            attackers: (attacker) ? 0.6 : 0.1,
-        }
+        [x: string]: number
     };
 }
+
+const rowWeights: Weights = {
+    1: {
+        defenders: 6,
+        midfielders: 3,
+        attackers: 1,
+    },
+    2: {
+        defenders: 5,
+        midfielders: 3,
+        attackers: 2,
+    },
+    3: {
+        defenders: 2,
+        midfielders: 5,
+        attackers: 3,
+    },
+    4: {
+        defenders: 2,
+        midfielders: 4,
+        attackers: 4,
+    },
+    5: {
+        defenders: 1,
+        midfielders: 3,
+        attackers: 6,
+    },
+};
+
+const colWeights: Weights = {
+    1: {
+        left: 6,
+        center: 3,
+        right: 1,
+    },
+    2: {
+        left: 2,
+        center: 6,
+        right: 2,
+    },
+    3: {
+        left: 1,
+        center: 3,
+        right: 6,
+    },
+};
+
+const rowPositions: { [key: string]: Position[] } = {
+    defenders: defencePositions,
+    midfielders: midfieldPositions,
+    attackers: attackPositions,
+};
+
+const colPositions: { [key: string]: Position[] } = {
+    left: leftPositions,
+    center: centerPositions,
+    right: rightPositions,
+};
 
 export default class Team implements TeamInterface {
     players: Player[];
     home: boolean;
     name: string;
+    field: Field|null = null;
 
     constructor(home: boolean, name: string, players: Player[]) {
         this.home = home;
         this.name = name;
         this.players = players;
+    }
+
+    setField(field: Field) {
+        this.field = field;
     }
 
     rating() {
@@ -86,7 +135,7 @@ export default class Team implements TeamInterface {
     }
 
     simulateMove(ballPosition: FieldArea, gameInfo: GameInfo): Action {
-        if (ballPosition === FieldArea.Offense) {
+        if ([FieldArea.AttackingLeft, FieldArea.AttackingCenter, FieldArea.AttackingRight].indexOf(ballPosition) >= 0) {
             const options = [[Action.GoalAttempt, 50], [Action.Stay, 35], [Action.Retreat, 15]];
 
             return getRandomElement(options);
@@ -98,21 +147,29 @@ export default class Team implements TeamInterface {
     }
 
     getProbablePlayer(fieldPosition: FieldArea, attacker: boolean, exclude: Player[] = []): Player {
-        const weights = createWeights(attacker);
-        const players: { weight: number, player: Player }[] = [];
+        if (!this.field) {
+            throw new Error('Field is not set');
+        }
 
-        this.getFieldPlayers(exclude).forEach(player => {
-            if (defencePositions.indexOf(player.position) > -1) {
-                players.push({ player, weight: weights[fieldPosition].defenders });
-            } else if (midfieldPositions.indexOf(player.position) > -1) {
-                players.push({ player, weight: weights[fieldPosition].midfielders });
-            } else {
-                players.push({ player, weight: weights[fieldPosition].attackers });
-            }
+        const [col, row] = this.field.fieldAreaToNumber(fieldPosition);
+        const rowWeight = rowWeights[row];
+        const colWeight = colWeights[col];
+        const rowOptions: [string, number][] = Object.entries(rowWeight);
+        const colOptions: [string, number][] = Object.entries(colWeight);
+        const rowPosition = getRandomElement(rowOptions);
+        const colPosition = getRandomElement(colOptions);
+        const playerRowPositions = rowPositions[rowPosition];
+        const playerColPositions = colPositions[colPosition];
+        const matchedPositions = playerRowPositions.filter((pos) => playerColPositions.includes(pos));
+        let foundPlayers = this.getFieldPlayers(exclude).filter((player) => {
+            return matchedPositions.includes(player.position);
         });
 
-        const random = Math.min(Math.random(), 0.6);
-        const foundPlayers = players.filter(player => player.weight >= random).map(obj => obj.player);
+        if (!foundPlayers.length) {
+            foundPlayers = this.getFieldPlayers(exclude).filter((player) => {
+                return playerRowPositions.includes(player.position);
+            });
+        }
 
         return foundPlayers[Math.floor(Math.random() * foundPlayers.length)];
     }

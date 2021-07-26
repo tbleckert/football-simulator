@@ -2,6 +2,7 @@
 <html>
     <head>
         <title>Soccer simulator</title>
+        <meta charset="utf-8">
         <link rel="preconnect" href="https://fonts.gstatic.com">
         <link href="https://fonts.googleapis.com/css2?family=Inter&family=JetBrains+Mono:wght@800&display=swap" rel="stylesheet">
         <style>
@@ -9,25 +10,61 @@
                 font-family: 'Inter', sans-serif;
             }
 
-            .mono {
+            .output {
+                padding: 1em;
+                background: #eee;
                 font-family: 'JetBrains Mono', monospace;
+                display: flex;
+            }
+
+            .output > div {
+                flex: 0 0 50%;
+                width: 50%;
             }
 
             .comments {
                 list-style: none;
-                margin: 0;
+                margin: 1em 0 0;
                 padding: 0;
-                height: 600px;
-                overflow: auto;
             }
 
             .comments li {
                 padding: 1em;
             }
 
-            .comments li:nth-child(odd) {
-                background: #F6F4FFFF;
+            .field {
+                display: flex;
+                border-top: 1px solid black;
+                border-left: 1px solid black;
+                flex-wrap: wrap;
             }
+
+            .field > div {
+                position: relative;
+                box-sizing: border-box;
+                width: 20%;
+                padding-bottom: 20%;
+                border-bottom: 1px solid black;
+                border-right: 1px solid black;
+            }
+
+            .field > div.ball::after {
+                content: "⚽️";
+                position: absolute;
+                inset: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+
+            .field > div.home {
+                background: rgba(78, 211, 241, 0.2);
+            }
+
+            .field > div.away {
+                background: rgba(241, 78, 111, 0.2);
+            }
+
         </style>
         <script>
             class Ws {
@@ -96,29 +133,90 @@
         </script>
     </head>
     <body>
-        <span class="mono" id="minute">'0</span>
-        <h1>
-            <span class="mono" id="homeScore">0</span>
-            <span class="mono">-</span>
-            <span class="mono" id="awayScore">0</span>
-        </h1>
-        <ul id="commentator" class="comments"></ul>
+        <div class="output" id="output">
+            <div id="data">
+                <div style="margin-bottom: 1em"><button type="button" id="play">Play️</button> <button type="button" id="next">Next</button></div>
+                <div>Minute: <span id="minute">'0</span></div>
+                <div>Home Score: <span id="homeScore">0</span></div>
+                <div>Away Score: <span id="awayScore">0</span></div>
+            </div>
+            <div>
+                <div class="field">
+                    <div id="A1"></div>
+                    <div id="A2"></div>
+                    <div id="A3"></div>
+                    <div id="A4"></div>
+                    <div id="A5"></div>
+                    <div id="B1"></div>
+                    <div id="B2"></div>
+                    <div class="ball" id="B3"></div>
+                    <div id="B4"></div>
+                    <div id="B5"></div>
+                    <div id="C1"></div>
+                    <div id="C2"></div>
+                    <div id="C3"></div>
+                    <div id="C4"></div>
+                    <div id="C5"></div>
+                </div>
+            </div>
+        </div>
         <script>
             const minute = document.getElementById('minute');
             const homeScore = document.getElementById('homeScore');
             const awayScore = document.getElementById('awayScore');
+            const playBtn = document.getElementById('play');
+            const nextBtn = document.getElementById('next');
+            let events = [];
+            let gameLoop = null;
+            let play = false;
 
-            function addComment(comment) {
-                if (!comment.text) {
+            function runEvent() {
+                if (!events.length) {
                     return;
                 }
 
-                const el = document.createElement('li');
+                const data = events.shift();
 
-                el.innerHTML = `'${comment.gameInfo.matchMinute} ${comment.text}`;
+                console.table(data);
 
-                document.getElementById('commentator').appendChild(el);
+                homeScore.innerHTML = data.gameInfo.homeGoals;
+                awayScore.innerHTML = data.gameInfo.awayGoals;
+                minute.innerHTML = data.gameInfo.matchMinute;
+
+                const area = document.getElementById(data.fieldPosition);
+
+                area.parentNode.querySelector('.ball').classList.remove('ball', 'home', 'away');
+
+                area.classList.add('ball');
+                area.classList.add((data.attackingTeam.home) ? 'home' : 'away');
             }
+
+            function dispatchEvent() {
+                if (!play || !events.length) {
+                    return;
+                }
+
+                runEvent();
+                setTimeout(dispatchEvent, 500);
+            }
+
+            playBtn.addEventListener('click', () => {
+                if (play) {
+                    play = false;
+                    playBtn.innerText = 'Play';
+                    nextBtn.style.display = null;
+                    clearTimeout(gameLoop);
+                } else {
+                    play = true;
+                    playBtn.innerText = 'Pause';
+                    nextBtn.style.display = 'none';
+                    dispatchEvent();
+                }
+            });
+
+            nextBtn.addEventListener('click', () => {
+                runEvent();
+            })
 
             function createTeamLineup(data) {
                 const homeTeam = document.createElement('div');
@@ -130,22 +228,14 @@
                 });
 
                 homeTeam.appendChild(homeTeamLineup);
-                document.body.appendChild(homeTeam);
+                document.getElementById('data').appendChild(homeTeam);
             }
 
-            ws.on('teams', (data) => {
+            ws.on('events', (data) => {
+                events = data.events;
+
                 createTeamLineup(data.home);
                 createTeamLineup(data.away);
-            });
-
-            ws.on('comment', (data) => {
-                addComment(data);
-            });
-
-            ws.on('event', (data) => {
-                homeScore.innerHTML = data.gameInfo.homeGoals;
-                awayScore.innerHTML = data.gameInfo.awayGoals;
-                minute.innerHTML = data.gameInfo.matchMinute;
             });
 
             ws.on('report', (data) => {
