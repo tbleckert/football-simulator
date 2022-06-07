@@ -1,6 +1,6 @@
 import http, {IncomingMessage, ServerResponse} from 'http';
 import fs from 'fs';
-import WebSocket from 'ws';
+import { WebSocketServer } from 'ws';
 import {Position} from '../enums/Position';
 import Team from '../Team';
 import type Player from '../Player';
@@ -56,7 +56,7 @@ server.listen(3005, () => {
     console.log('server is listening on port 3005');
 });
 
-const wss = new WebSocket.Server({ port: 8080 });
+const wss = new WebSocketServer({ port: 8080 });
 const broadcast = (data: any) => {
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {

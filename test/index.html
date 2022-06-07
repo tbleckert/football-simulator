@@ -139,6 +139,7 @@
                 <div>Minute: <span id="minute">'0</span></div>
                 <div>Home Score: <span id="homeScore">0</span></div>
                 <div>Away Score: <span id="awayScore">0</span></div>
+                <div>Last event: <span id="lastEvent"></span></div>
             </div>
             <div>
                 <div class="field">
@@ -161,9 +162,28 @@
             </div>
         </div>
         <script>
+            const eventNames = [
+                'GameStart',
+                'Kickoff',
+                'HalfTime',
+                'GameEnd',
+                'Injury',
+                'Goal',
+                'Save',
+                'Block',
+                'Substitution',
+                'Possession',
+                'Defence',
+                'EventLess',
+                'Advance',
+                'Retreat',
+                'Corner',
+                'FreeKick',
+            ];
             const minute = document.getElementById('minute');
             const homeScore = document.getElementById('homeScore');
             const awayScore = document.getElementById('awayScore');
+            const lastEvent = document.getElementById('lastEvent');
             const playBtn = document.getElementById('play');
             const nextBtn = document.getElementById('next');
             let events = [];
@@ -182,6 +202,7 @@
                 homeScore.innerHTML = data.gameInfo.homeGoals;
                 awayScore.innerHTML = data.gameInfo.awayGoals;
                 minute.innerHTML = data.gameInfo.matchMinute;
+                lastEvent.innerHTML = eventNames[data.event];
 
                 const area = document.getElementById(data.fieldPosition);
 
