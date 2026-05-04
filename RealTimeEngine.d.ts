@@ -1,5 +1,5 @@
 import { Position } from './enums/Position';
-import type Player from './Player';
+import Player from './Player';
 import type { PlayerAttributes } from './Player';
 import type Team from './Team';
 export interface Vector2 {
@@ -10,13 +10,19 @@ export type TeamSide = 'home' | 'away';
 export type Mentality = 'defensive' | 'balanced' | 'attacking';
 export type MatchPhase = 'kickoff' | 'open_play' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'injury_stoppage' | 'substitution' | 'half_time' | 'full_time';
 export type PlayerIntentType = 'hold_shape' | 'press' | 'support' | 'receive' | 'dribble' | 'pass' | 'shoot' | 'recover';
-export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'pass' | 'receive' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
+export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'dribble' | 'challenge' | 'yellow_card' | 'red_card' | 'injury' | 'substitution' | 'pass' | 'receive' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
 export interface Tactics {
     formation: string;
     press: number;
     width: number;
     tempo: number;
     mentality: Mentality;
+}
+export interface RefereeProfile {
+    strictness: number;
+    advantagePatience: number;
+    penaltyThreshold: number;
+    bookingThreshold: number;
 }
 export interface PlayerIntent {
     type: PlayerIntentType;
@@ -36,6 +42,15 @@ export interface SimulatedPlayer {
     attributes: PlayerAttributes;
     currentIntent: PlayerIntent;
     actionCooldown: number;
+    foulsCommitted: number;
+    foulsSuffered: number;
+    yellowCards: number;
+    redCard: boolean;
+    aggressionRisk: number;
+    tackleTimingRisk: number;
+    injurySeverity: 'none' | 'knock' | 'minor' | 'forced';
+    injuryPerformancePenalty: number;
+    onPitch: boolean;
 }
 export interface BallState {
     x: number;
@@ -70,12 +85,21 @@ export interface MatchState {
         home: Tactics;
         away: Tactics;
     };
+    referee: RefereeProfile;
     score: {
         home: number;
         away: number;
     };
     activeBallAction: ActiveBallAction | null;
     restart: RestartState | null;
+    bench: {
+        home: SimulatedPlayer[];
+        away: SimulatedPlayer[];
+    };
+    substitutionsUsed: {
+        home: number;
+        away: number;
+    };
 }
 export interface RealTimeMatchEvent {
     type: RealTimeEventType;
@@ -101,6 +125,11 @@ export interface MatchSnapshotPlayer {
     x: number;
     y: number;
     stamina: number;
+    foulsCommitted: number;
+    foulsSuffered: number;
+    yellowCards: number;
+    redCard: boolean;
+    injurySeverity: 'none' | 'knock' | 'minor' | 'forced';
     currentIntent: PlayerIntent;
     target: Vector2;
 }
@@ -131,6 +160,7 @@ export interface RealTimeEngineOptions {
     matchLengthSeconds: number;
     homeTactics: Partial<Tactics>;
     awayTactics: Partial<Tactics>;
+    referee: Partial<RefereeProfile>;
     random: () => number;
 }
 export default class RealTimeEngine {
@@ -152,7 +182,11 @@ export default class RealTimeEngine {
     tick(): MatchSlice;
     private commitSnapshot;
     private tacticsFromOptions;
+    private refereeFromOptions;
     private createPlayers;
+    private createBenchPlayers;
+    private generateBenchPlayers;
+    private fallbackAttributes;
     private handleTimeBoundaries;
     private startedSecondHalfSide;
     private resetForKickoff;
@@ -160,7 +194,10 @@ export default class RealTimeEngine {
     private executeThrowIn;
     private executeCorner;
     private executeGoalKick;
+    private executeFreeKick;
+    private executePenalty;
     private playRestartPass;
+    private playRestartShot;
     private detectBallOut;
     private prepareGoalLineRestart;
     private prepareRestart;
@@ -179,6 +216,17 @@ export default class RealTimeEngine {
     private movePlayersAndBall;
     private detectEvents;
     private detectTackleOrFoul;
+    private resolveFoul;
+    private bookingEvents;
+    private injuryEvents;
+    private prepareFoulRestart;
+    private applyRedCard;
+    private detectSubstitutionEvents;
+    private substitutionCandidate;
+    private performSubstitution;
+    private selectSubstituteFor;
+    private isPenaltyFoul;
+    private penaltySpotFor;
     private detectLooseBallRecovery;
     private detectPassOutcome;
     private detectShotOutcome;

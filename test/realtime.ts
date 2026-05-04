@@ -391,6 +391,134 @@ if (fouledPlayer && foulingPlayer) {
 }
 
 assert.ok(foulEngine.events.some((event) => event.type === 'foul'), 'close defensive pressure should be able to produce a foul event');
+assert.ok(foulEngine.events.some((event) => event.type === 'free_kick'), 'fouls outside the box should create a free-kick restart');
+
+const cardEngine = new RealTimeEngine(createTeam(true, 'Card Home', [
+    Position.GK,
+    Position.LB,
+    Position.LCB,
+    Position.RCB,
+    Position.RB,
+    Position.LM,
+    Position.LCM,
+    Position.RCM,
+    Position.RM,
+    Position.LF,
+    Position.RF,
+]), createTeam(false, 'Card Away', [
+    Position.GK,
+    Position.LB,
+    Position.LCB,
+    Position.RCB,
+    Position.RB,
+    Position.LCM,
+    Position.CM,
+    Position.RCM,
+    Position.LW,
+    Position.CF,
+    Position.RW,
+]), {
+    tickSeconds: 0.01,
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0, 0, 0.99]),
+});
+cardEngine.start();
+
+const cardedCarrier = cardEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const cardedDefender = cardEngine.state.players.find((player) => player.side === 'away' && player.role === Position.LCB);
+
+assert.ok(cardedCarrier && cardedDefender, 'the forced card scenario needs a carrier and defender');
+
+if (cardedCarrier && cardedDefender) {
+    cardedCarrier.x = 52;
+    cardedCarrier.y = 34;
+    cardedCarrier.actionCooldown = 5;
+    cardedDefender.x = 52.2;
+    cardedDefender.y = 34;
+    cardedDefender.yellowCards = 1;
+    cardedDefender.foulsCommitted = 2;
+    cardEngine.state.ball.owner = cardedCarrier;
+    cardEngine.state.ball.x = cardedCarrier.x;
+    cardEngine.state.ball.y = cardedCarrier.y;
+    cardEngine.tick();
+}
+
+assert.ok(cardEngine.events.some((event) => event.type === 'yellow_card'), 'reckless fouls should be bookable');
+assert.ok(cardEngine.events.some((event) => event.type === 'red_card'), 'a second yellow should become a red card');
+assert.equal(cardEngine.state.players.some((player) => player === cardedDefender), false, 'red-carded players should leave the pitch');
+
+const injuryEngine = new RealTimeEngine(createTeam(true, 'Injury Home', [
+    Position.GK,
+    Position.LB,
+    Position.LCB,
+    Position.RCB,
+    Position.RB,
+    Position.LM,
+    Position.LCM,
+    Position.RCM,
+    Position.RM,
+    Position.LF,
+    Position.RF,
+]), createTeam(false, 'Injury Away', [
+    Position.GK,
+    Position.LB,
+    Position.LCB,
+    Position.RCB,
+    Position.RB,
+    Position.LCM,
+    Position.CM,
+    Position.RCM,
+    Position.LW,
+    Position.CF,
+    Position.RW,
+]), {
+    tickSeconds: 0.01,
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0, 0.99, 0, 0]),
+});
+injuryEngine.start();
+
+const injuredCarrier = injuryEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const injuryDefender = injuryEngine.state.players.find((player) => player.side === 'away' && player.role === Position.LCB);
+
+assert.ok(injuredCarrier && injuryDefender, 'the forced injury scenario needs a carrier and defender');
+
+if (injuredCarrier && injuryDefender) {
+    injuredCarrier.x = 52;
+    injuredCarrier.y = 34;
+    injuredCarrier.actionCooldown = 5;
+    injuryDefender.x = 52.2;
+    injuryDefender.y = 34;
+    injuryEngine.state.ball.owner = injuredCarrier;
+    injuryEngine.state.ball.x = injuredCarrier.x;
+    injuryEngine.state.ball.y = injuredCarrier.y;
+    injuryEngine.tick();
+}
+
+assert.ok(injuryEngine.events.some((event) => event.type === 'injury' && event.outcome === 'forced'), 'heavy challenges should be able to force an injury');
+assert.ok(injuryEngine.events.some((event) => event.type === 'substitution' && event.outcome === 'forced_injury'), 'forced injuries should trigger a substitution when a bench player is available');
+assert.equal(injuryEngine.state.players.length, 22, 'injury substitutions should preserve the number of players on the pitch');
+
+const substitutionEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 90 * 60,
+    random: seededRandom(13),
+});
+substitutionEngine.start();
+substitutionEngine.state.period = 2;
+substitutionEngine.state.time = 65 * 60;
+
+const exhaustedPlayer = substitutionEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RM);
+
+assert.ok(exhaustedPlayer, 'the planned substitution scenario needs an exhausted player');
+
+if (exhaustedPlayer) {
+    exhaustedPlayer.stamina = 20;
+    const substitutionSlice = substitutionEngine.tick();
+
+    assert.ok(substitutionSlice.events.some((event) => event.type === 'substitution' && event.outcome === 'exhausted'), 'exhausted players should match substitution criteria');
+    assert.equal(substitutionSlice.snapshot.phase, 'substitution', 'planned substitutions should expose the substitution phase');
+    assert.equal(substitutionEngine.state.phase, 'open_play', 'substitution stoppages should return to open play');
+}
 
 const tackleEngine = new RealTimeEngine(createTeam(true, 'Tackle Home', [
     Position.GK,
