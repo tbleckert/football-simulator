@@ -14,6 +14,8 @@ export interface TeamStats {
     shotsOnGoal: number;
     tackles: number;
     fouls: number;
+    yellowCards: number;
+    redCards: number;
 }
 
 export interface SimulationReport {
@@ -291,6 +293,14 @@ function registerEvent(stats: TeamStats, event: RealTimeMatchEvent): void {
     if (event.type === 'foul') {
         stats.fouls += 1;
     }
+
+    if (event.type === 'yellow_card') {
+        stats.yellowCards += 1;
+    }
+
+    if (event.type === 'red_card') {
+        stats.redCards += 1;
+    }
 }
 
 function emptyStats(): TeamStats {
@@ -301,6 +311,8 @@ function emptyStats(): TeamStats {
         shotsOnGoal: 0,
         tackles: 0,
         fouls: 0,
+        yellowCards: 0,
+        redCards: 0,
     };
 }
 

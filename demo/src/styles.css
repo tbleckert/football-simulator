@@ -139,6 +139,11 @@ main {
     padding: 0 0.75rem;
 }
 
+.controls button:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+
 .controls label {
     display: inline-flex;
     align-items: center;
@@ -146,10 +151,45 @@ main {
     text-transform: uppercase;
 }
 
+.timeline,
 .controls input {
     flex: 1 0 100%;
     width: 100%;
+}
+
+.timeline {
+    position: relative;
+    display: grid;
+    align-items: center;
+}
+
+.timeline input {
     accent-color: var(--brand-color);
+}
+
+.goal-markers {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 100%;
+    pointer-events: none;
+}
+
+.goal-markers button {
+    position: absolute;
+    top: 50%;
+    width: 0.7rem;
+    height: 0.7rem;
+    padding: 0;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: var(--away-color);
+    pointer-events: auto;
+    transform: translate(-50%, -50%);
+}
+
+.goal-markers button.active {
+    background: var(--brand-alternate-color);
+    outline: 2px solid var(--brand-color);
 }
 
 .pitch-shell {
@@ -186,7 +226,8 @@ main {
 .mark,
 .player,
 .target,
-.ball {
+.ball,
+.restart-zone {
     position: absolute;
 }
 
@@ -247,11 +288,22 @@ main {
     background: var(--away-color);
 }
 
+.restart-zone {
+    z-index: 1;
+    width: 4rem;
+    aspect-ratio: 1;
+    border: 2px dashed rgba(255, 255, 255, 0.72);
+    border-radius: 50%;
+    background: rgba(161, 232, 204, 0.18);
+    transform: translate(-50%, -50%);
+}
+
 .player {
     display: grid;
     place-items: center;
     width: 1.7rem;
     height: 1.7rem;
+    padding: 0;
     border: 2px solid #fff;
     border-radius: 50%;
     color: #000;
@@ -276,6 +328,11 @@ main {
     box-shadow: 0 0 0 0.35rem rgba(240, 213, 247, 0.55);
 }
 
+.player.selected {
+    outline: 3px solid #fff;
+    outline-offset: 3px;
+}
+
 .ball {
     z-index: 4;
     width: 0.8rem;
@@ -291,6 +348,45 @@ main {
     width: min(760px, 100%);
     margin: 0 auto calc(var(--gutter-y) * 2);
     font-family: var(--font-mono);
+}
+
+.inspector {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr);
+    gap: 1rem;
+    width: min(960px, 100%);
+    margin: calc(var(--gutter-y) * -1) auto var(--gutter-y);
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-small);
+}
+
+.inspector strong,
+.inspector span {
+    display: block;
+}
+
+.inspector dl {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.inspector div,
+.inspector dl,
+.inspector dt,
+.inspector dd {
+    margin: 0;
+}
+
+.inspector dt {
+    color: var(--subtle-color);
+    text-transform: uppercase;
+}
+
+.inspector dd {
+    font-weight: 900;
 }
 
 .events h2 {
@@ -410,6 +506,14 @@ table {
     .teams {
         grid-template-columns: 1fr;
         gap: calc(var(--gutter-y) * 2);
+    }
+
+    .inspector {
+        grid-template-columns: 1fr;
+    }
+
+    .inspector dl {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .score-sheet__item {

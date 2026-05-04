@@ -1,8 +1,12 @@
 <script lang="ts">
+    import { createEventDispatcher } from 'svelte';
     import { Position } from '$simulator/enums/Position';
     import type { MatchSnapshot } from '$simulator/RealTimeEngine';
 
     export let snapshot: MatchSnapshot;
+    export let selectedPlayerId = '';
+
+    const dispatch = createEventDispatcher<{ selectPlayer: { id: string } }>();
 
     const pitch = {
         length: 105,
@@ -25,6 +29,10 @@
         return phase.replace('_', ' ');
     }
 
+    function isSetPiece(phase: string): boolean {
+        return ['throw_in', 'corner', 'goal_kick', 'free_kick', 'penalty'].includes(phase);
+    }
+
     $: ballOwner = snapshot.players.find((player) => player.id === snapshot.ball.ownerId);
 </script>
 
@@ -45,6 +53,13 @@
         <div class="mark mark--circle"></div>
         <div class="mark mark--home-box"></div>
         <div class="mark mark--away-box"></div>
+        {#if isSetPiece(snapshot.phase)}
+            <div
+                class="restart-zone"
+                style:left={`${x(snapshot.ball.x)}%`}
+                style:top={`${y(snapshot.ball.y)}%`}
+            ></div>
+        {/if}
         {#each snapshot.players as player}
             <div
                 class:home={player.teamSide === 'home'}
@@ -55,17 +70,21 @@
             ></div>
         {/each}
         {#each snapshot.players as player}
-            <div
+            <button
+                type="button"
                 class:home={player.teamSide === 'home'}
                 class:away={player.teamSide === 'away'}
                 class:owner={player.id === snapshot.ball.ownerId}
+                class:selected={player.id === selectedPlayerId}
                 class="player"
                 style:left={`${x(player.x)}%`}
                 style:top={`${y(player.y)}%`}
-                title={`${player.teamSide} ${Position[player.role]} ${player.currentIntent.type}`}
+                title={`${player.playerName} ${Position[player.role]} ${player.currentIntent.type}`}
+                aria-label={`${player.playerName} ${Position[player.role]}`}
+                on:click={() => dispatch('selectPlayer', { id: player.id })}
             >
                 {shortRole(player.roleName)}
-            </div>
+            </button>
         {/each}
         <div
             class="ball"

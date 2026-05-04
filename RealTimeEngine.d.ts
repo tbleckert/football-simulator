@@ -121,12 +121,18 @@ export interface RealTimeMatchEvent {
         away: number;
     };
     outcome?: string;
+    replayWindow?: {
+        startTime: number;
+        endTime: number;
+    };
 }
 export interface MatchSnapshotPlayer {
     id: string;
     teamSide: TeamSide;
     role: Position;
     roleName: string;
+    playerName: string;
+    playerNumber: number;
     x: number;
     y: number;
     stamina: number;
@@ -244,6 +250,7 @@ export default class RealTimeEngine {
     private detectShotBlock;
     private snapshot;
     private createEvent;
+    private replayWindowForGoal;
     private formationTargetsForRoles;
     private formationSlotScore;
     private roleFormationPreference;

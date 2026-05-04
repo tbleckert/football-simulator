@@ -52,6 +52,14 @@
                 <th>Fouls</th>
                 <td>{report.fouls}</td>
             </tr>
+            <tr>
+                <th>Yellow cards</th>
+                <td>{report.yellowCards}</td>
+            </tr>
+            <tr>
+                <th>Red cards</th>
+                <td>{report.redCards}</td>
+            </tr>
         </tbody>
     </table>
 

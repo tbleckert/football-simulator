@@ -196,6 +196,10 @@ export interface RealTimeMatchEvent {
         away: number;
     };
     outcome?: string;
+    replayWindow?: {
+        startTime: number;
+        endTime: number;
+    };
 }
 
 export interface MatchSnapshotPlayer {
@@ -203,6 +207,8 @@ export interface MatchSnapshotPlayer {
     teamSide: TeamSide;
     role: Position;
     roleName: string;
+    playerName: string;
+    playerNumber: number;
     x: number;
     y: number;
     stamina: number;
@@ -767,6 +773,7 @@ export default class RealTimeEngine {
         if (roll < goalChance) {
             this.state.score[restart.teamSide] += 1;
             const event = this.createEvent('penalty', taker, goalkeeper || undefined, 'goal');
+            event.replayWindow = this.replayWindowForGoal();
             this.resetForKickoff(this.oppositeSide(restart.teamSide));
             this.state.phase = 'penalty';
             this.nextPhaseAfterSnapshot = 'open_play';
@@ -1897,6 +1904,7 @@ export default class RealTimeEngine {
             this.state.activeBallAction = null;
 
             const goalEvent = this.createEvent('goal', action.from, undefined, `${action.route || 'open_play'}_goal`);
+            goalEvent.replayWindow = this.replayWindowForGoal();
             this.resetForKickoff(this.oppositeSide(action.teamSide));
             this.state.phase = 'kickoff';
             this.nextPhaseAfterSnapshot = 'open_play';
@@ -1978,6 +1986,8 @@ export default class RealTimeEngine {
                 teamSide: player.side,
                 role: player.role,
                 roleName: Position[player.role],
+                playerName: player.player.info.name,
+                playerNumber: player.player.info.number,
                 x: this.round(player.x),
                 y: this.round(player.y),
                 stamina: this.round(player.stamina),
@@ -2023,6 +2033,13 @@ export default class RealTimeEngine {
             },
             score: { ...this.state.score },
             outcome,
+        };
+    }
+
+    private replayWindowForGoal(): { startTime: number, endTime: number } {
+        return {
+            startTime: this.roundTime(Math.max(0, this.state.time - 12)),
+            endTime: this.roundTime(Math.min(this.matchLengthSeconds, this.state.time + 4)),
         };
     }
 

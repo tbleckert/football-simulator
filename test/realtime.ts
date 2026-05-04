@@ -444,6 +444,7 @@ if (shooter) {
 
 assert.ok(shootingEngine.events.some((event) => event.type === 'shot'), 'forced attacking state should produce a shot event');
 assert.ok(shootingEngine.events.some((event) => event.type === 'goal'), 'forced on-target shot should produce a goal event');
+assert.ok(shootingEngine.events.some((event) => event.type === 'goal' && event.replayWindow && event.replayWindow.startTime <= event.time && event.replayWindow.endTime >= event.time), 'goal events should expose a replay window around the scoring event');
 assert.equal(shootingEngine.state.score.home, 1, 'forced home goal should update the score');
 assert.equal(shootingEngine.state.ball.owner?.side, 'away', 'conceding team should restart after a goal');
 assert.equal(shootingEngine.state.ball.x, 105 / 2, 'goal restart should put the ball on the center spot');
