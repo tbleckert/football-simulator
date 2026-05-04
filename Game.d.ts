@@ -1,4 +1,3 @@
-/// <reference types="node" />
 import type Team from './Team';
 import type { GameEvent } from './types/GameEvent';
 import type Commentator from './Commentator';

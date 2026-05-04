@@ -12,7 +12,7 @@ export interface ScoreItem {
     assist: boolean | Player;
     team: Team;
 }
-export declare type ScoreSheet = ScoreItem[];
+export type ScoreSheet = ScoreItem[];
 export interface Report {
     away: TeamReport;
     home: TeamReport;

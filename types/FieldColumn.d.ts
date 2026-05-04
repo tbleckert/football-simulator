@@ -1,1 +1,1 @@
-export declare type FieldColumn = 'A' | 'B' | 'C';
+export type FieldColumn = 'A' | 'B' | 'C';
