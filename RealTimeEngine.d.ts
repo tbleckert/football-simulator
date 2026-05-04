@@ -8,8 +8,9 @@ export interface Vector2 {
 }
 export type TeamSide = 'home' | 'away';
 export type Mentality = 'defensive' | 'balanced' | 'attacking';
+export type MatchPhase = 'kickoff' | 'open_play' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'injury_stoppage' | 'substitution' | 'half_time' | 'full_time';
 export type PlayerIntentType = 'hold_shape' | 'press' | 'support' | 'receive' | 'dribble' | 'pass' | 'shoot' | 'recover';
-export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'pass' | 'receive' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
+export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'pass' | 'receive' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
 export interface Tactics {
     formation: string;
     press: number;
@@ -41,6 +42,14 @@ export interface BallState {
     y: number;
     velocity: Vector2;
     owner: SimulatedPlayer | null;
+    lastTouchSide: TeamSide | null;
+    lastTouchPlayerId: string | null;
+}
+export interface RestartState {
+    phase: Extract<MatchPhase, 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty'>;
+    teamSide: TeamSide;
+    position: Vector2;
+    reason: string;
 }
 export interface ActiveBallAction {
     type: 'pass' | 'shot';
@@ -54,6 +63,7 @@ export interface ActiveBallAction {
 export interface MatchState {
     time: number;
     period: 1 | 2 | 'ended';
+    phase: MatchPhase;
     ball: BallState;
     players: SimulatedPlayer[];
     tactics: {
@@ -65,6 +75,7 @@ export interface MatchState {
         away: number;
     };
     activeBallAction: ActiveBallAction | null;
+    restart: RestartState | null;
 }
 export interface RealTimeMatchEvent {
     type: RealTimeEventType;
@@ -96,6 +107,7 @@ export interface MatchSnapshotPlayer {
 export interface MatchSnapshot {
     time: number;
     period: 1 | 2 | 'ended';
+    phase: MatchPhase;
     score: {
         home: number;
         away: number;
@@ -132,15 +144,27 @@ export default class RealTimeEngine {
     gameStarted: boolean;
     private random;
     private startedWithBallSide;
+    private nextPhaseAfterSnapshot;
+    private clearRestartAfterSnapshot;
     constructor(homeTeam: Team, awayTeam: Team, options?: Partial<RealTimeEngineOptions>);
     start(): MatchSnapshot;
     simulate(untilSeconds?: number): MatchSnapshot[];
     tick(): MatchSlice;
+    private commitSnapshot;
     private tacticsFromOptions;
     private createPlayers;
     private handleTimeBoundaries;
     private startedSecondHalfSide;
     private resetForKickoff;
+    private resolvePhaseAction;
+    private executeThrowIn;
+    private executeCorner;
+    private executeGoalKick;
+    private playRestartPass;
+    private detectBallOut;
+    private prepareGoalLineRestart;
+    private prepareRestart;
+    private placePlayersForRestart;
     private updateTacticalTargetPositions;
     private resetPlayersToFormation;
     private decidePlayerIntents;
@@ -168,6 +192,13 @@ export default class RealTimeEngine {
     private formationSlots;
     private parseFormation;
     private selectPassTarget;
+    private selectRestartTaker;
+    private selectThrowInTarget;
+    private selectBoxTarget;
+    private selectShortGoalKickTarget;
+    private selectLongGoalKickTarget;
+    private safeRestartTarget;
+    private cornerTargetPoint;
     private supportTarget;
     private shootingIntentChance;
     private passQuality;
@@ -191,6 +222,9 @@ export default class RealTimeEngine {
     private attackDirectionForPeriod;
     private oppositeSide;
     private goalCenterAgainst;
+    private attackingSideForGoalLine;
+    private goalKickPosition;
+    private registerTouch;
     private mirrorForSide;
     private mentalityShift;
     private randomPoint;

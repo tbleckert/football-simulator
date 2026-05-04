@@ -191,10 +191,63 @@ assert.ok(finalSnapshot.ball.y >= 0 && finalSnapshot.ball.y <= 68, 'ball y shoul
 assert.ok(finalSnapshot.players.every((player) => finitePoint(player)), 'player coordinates should stay finite');
 assert.ok(finalSnapshot.players.every((player) => finitePoint(player.target)), 'player tactical targets should stay finite');
 assert.ok(finalSnapshot.players.every((player) => player.currentIntent.type.length > 0), 'every player should expose a current intent');
+assert.equal(firstSnapshot.phase, 'kickoff', 'the opening snapshot should expose the kickoff phase');
+assert.equal(finalSnapshot.phase, 'full_time', 'the final snapshot should expose the full-time phase');
 assert.ok(allEvents.includes('match_start'), 'the event stream should include match start');
 assert.ok(allEvents.includes('kickoff'), 'the event stream should include kickoff');
 assert.ok(allEvents.includes('pass'), 'the event stream should include passes');
 assert.ok(openPlayEvents.length > 0, 'the event stream should include open-play events');
+
+const throwInEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: seededRandom(10),
+});
+throwInEngine.start();
+throwInEngine.state.ball.owner = null;
+throwInEngine.state.ball.x = 42;
+throwInEngine.state.ball.y = -1;
+throwInEngine.state.ball.velocity = { x: 0, y: 0 };
+throwInEngine.state.ball.lastTouchSide = 'home';
+const throwInSlice = throwInEngine.tick();
+throwInEngine.tick();
+
+assert.ok(throwInSlice.events.some((event) => event.type === 'throw_in' && event.teamSide === 'away'), 'touchline exits should award a throw-in to the other team');
+assert.equal(throwInSlice.snapshot.phase, 'throw_in', 'throw-in award snapshots should expose the throw-in phase');
+assert.equal(throwInEngine.state.phase, 'open_play', 'throw-ins should return the match to open play after the restart action');
+
+const cornerEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: seededRandom(11),
+});
+cornerEngine.start();
+cornerEngine.state.ball.owner = null;
+cornerEngine.state.ball.x = 106;
+cornerEngine.state.ball.y = 4;
+cornerEngine.state.ball.velocity = { x: 0, y: 0 };
+cornerEngine.state.ball.lastTouchSide = 'away';
+const cornerSlice = cornerEngine.tick();
+cornerEngine.tick();
+
+assert.ok(cornerSlice.events.some((event) => event.type === 'corner' && event.teamSide === 'home'), 'defensive touches over the goal line should award a corner');
+assert.equal(cornerSlice.snapshot.phase, 'corner', 'corner award snapshots should expose the corner phase');
+assert.equal(cornerEngine.state.phase, 'open_play', 'corners should return the match to open play after the restart action');
+
+const goalKickEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: seededRandom(12),
+});
+goalKickEngine.start();
+goalKickEngine.state.ball.owner = null;
+goalKickEngine.state.ball.x = 106;
+goalKickEngine.state.ball.y = 40;
+goalKickEngine.state.ball.velocity = { x: 0, y: 0 };
+goalKickEngine.state.ball.lastTouchSide = 'home';
+const goalKickSlice = goalKickEngine.tick();
+goalKickEngine.tick();
+
+assert.ok(goalKickSlice.events.some((event) => event.type === 'goal_kick' && event.teamSide === 'away'), 'attacking touches over the goal line should award a goal kick');
+assert.equal(goalKickSlice.snapshot.phase, 'goal_kick', 'goal-kick award snapshots should expose the goal-kick phase');
+assert.equal(goalKickEngine.state.phase, 'open_play', 'goal kicks should return the match to open play after the restart action');
 
 const halfTimeEngine = new RealTimeEngine(homeTeam, awayTeam, {
     matchLengthSeconds: 120,

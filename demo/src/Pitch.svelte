@@ -21,12 +21,17 @@
         return roleName.replace(/[A-Z]?([A-Z])[^A-Z]*/g, '$1').slice(0, 3);
     }
 
+    function phaseLabel(phase: string): string {
+        return phase.replace('_', ' ');
+    }
+
     $: ballOwner = snapshot.players.find((player) => player.id === snapshot.ball.ownerId);
 </script>
 
 <div class="pitch-shell">
     <div class="pitch-meta">
         <span>{snapshot.period === 'ended' ? 'Full time' : `Period ${snapshot.period}`}</span>
+        <span>{phaseLabel(snapshot.phase)}</span>
         <span>
             {#if ballOwner}
                 {ballOwner.teamSide.toUpperCase()} {ballOwner.roleName}
