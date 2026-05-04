@@ -249,6 +249,113 @@ assert.ok(goalKickSlice.events.some((event) => event.type === 'goal_kick' && eve
 assert.equal(goalKickSlice.snapshot.phase, 'goal_kick', 'goal-kick award snapshots should expose the goal-kick phase');
 assert.equal(goalKickEngine.state.phase, 'open_play', 'goal kicks should return the match to open play after the restart action');
 
+const movementEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: seededRandom(14),
+});
+movementEngine.start();
+
+const wideCarrier = movementEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const overlappingFullback = movementEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RB);
+
+assert.ok(wideCarrier && overlappingFullback, 'the movement scenario needs a wide carrier and fullback');
+
+if (wideCarrier && overlappingFullback) {
+    wideCarrier.x = 70;
+    wideCarrier.y = 12;
+    wideCarrier.actionCooldown = 5;
+    overlappingFullback.x = 64;
+    overlappingFullback.y = 14;
+    movementEngine.state.ball.owner = wideCarrier;
+    movementEngine.state.ball.x = wideCarrier.x;
+    movementEngine.state.ball.y = wideCarrier.y;
+    const movementSlice = movementEngine.tick();
+    const fullbackSnapshot = movementSlice.snapshot.players.find((player) => player.id === overlappingFullback.id);
+
+    assert.equal(fullbackSnapshot?.currentIntent.type, 'overlap', 'fullbacks should make short-lived overlapping runs when the wide carrier is advanced');
+    assert.ok(typeof fullbackSnapshot?.currentIntent.duration === 'number', 'intents should expose duration');
+    assert.ok(typeof fullbackSnapshot?.currentIntent.urgency === 'number', 'intents should expose urgency');
+    assert.ok(typeof fullbackSnapshot?.currentIntent.tacticalRisk === 'number', 'intents should expose tactical risk');
+}
+
+const tacticsEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 90 * 60,
+    random: seededRandom(15),
+    homeTactics: {
+        tempo: 50,
+        press: 50,
+        mentality: 'balanced',
+    },
+});
+tacticsEngine.start();
+tacticsEngine.state.period = 2;
+tacticsEngine.state.time = 70 * 60;
+tacticsEngine.state.score.away = 1;
+tacticsEngine.tick();
+
+assert.equal(tacticsEngine.state.tactics.home.mentality, 'attacking', 'losing teams should chase the match after the hour mark');
+assert.ok(tacticsEngine.state.tactics.home.tempo > 50, 'losing teams should play faster after the hour mark');
+
+const longShotEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0, 0.5, 0.5]),
+});
+longShotEngine.start();
+
+const longShotMidfielder = longShotEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+
+assert.ok(longShotMidfielder, 'the long-shot scenario needs a midfielder');
+
+if (longShotMidfielder) {
+    longShotMidfielder.x = 76;
+    longShotMidfielder.y = 34;
+    longShotMidfielder.actionCooldown = 0;
+    longShotEngine.state.ball.owner = longShotMidfielder;
+    longShotEngine.state.ball.x = longShotMidfielder.x;
+    longShotEngine.state.ball.y = longShotMidfielder.y;
+    longShotEngine.tick();
+}
+
+assert.ok(longShotEngine.events.some((event) => event.type === 'shot' && event.outcome === 'long_shot'), 'midfielders should be able to create long-shot scoring routes');
+
+const goalkeeperEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0]),
+});
+goalkeeperEngine.start();
+
+const cornerTaker = goalkeeperEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RM);
+const cornerTarget = goalkeeperEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const goalkeeper = goalkeeperEngine.state.players.find((player) => player.side === 'away' && player.role === Position.GK);
+
+assert.ok(cornerTaker && cornerTarget && goalkeeper, 'the goalkeeper claim scenario needs a taker, target, and goalkeeper');
+
+if (cornerTaker && cornerTarget && goalkeeper) {
+    goalkeeper.x = 98;
+    goalkeeper.y = 34;
+    goalkeeperEngine.state.ball.owner = null;
+    goalkeeperEngine.state.ball.x = 98;
+    goalkeeperEngine.state.ball.y = 34;
+    goalkeeperEngine.state.ball.velocity = { x: 0, y: 0 };
+    goalkeeperEngine.state.activeBallAction = {
+        type: 'pass',
+        from: cornerTaker,
+        teamSide: 'home',
+        target: {
+            x: cornerTarget.x,
+            y: cornerTarget.y,
+        },
+        targetPlayer: cornerTarget,
+        inaccurate: false,
+        quality: 0.5,
+        route: 'penalty_spot',
+        restartType: 'corner',
+    };
+    goalkeeperEngine.tick();
+}
+
+assert.ok(goalkeeperEngine.events.some((event) => event.type === 'goalkeeper_claim'), 'goalkeepers should be able to claim crosses and corners');
+
 const halfTimeEngine = new RealTimeEngine(homeTeam, awayTeam, {
     matchLengthSeconds: 120,
     random: seededRandom(99),

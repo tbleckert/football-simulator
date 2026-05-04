@@ -9,8 +9,8 @@ export interface Vector2 {
 export type TeamSide = 'home' | 'away';
 export type Mentality = 'defensive' | 'balanced' | 'attacking';
 export type MatchPhase = 'kickoff' | 'open_play' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'injury_stoppage' | 'substitution' | 'half_time' | 'full_time';
-export type PlayerIntentType = 'hold_shape' | 'press' | 'support' | 'receive' | 'dribble' | 'pass' | 'shoot' | 'recover';
-export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'dribble' | 'challenge' | 'yellow_card' | 'red_card' | 'injury' | 'substitution' | 'pass' | 'receive' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
+export type PlayerIntentType = 'hold_shape' | 'press' | 'cover_passing_lane' | 'track_runner' | 'overlap' | 'underlap' | 'attack_box' | 'drop_between_lines' | 'drift_wide' | 'make_forward_run' | 'recover_shape' | 'support_carrier' | 'support' | 'receive' | 'dribble' | 'pass' | 'shoot' | 'recover';
+export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'dribble' | 'challenge' | 'yellow_card' | 'red_card' | 'injury' | 'substitution' | 'aerial_duel' | 'blocked_shot' | 'goalkeeper_claim' | 'goalkeeper_punch' | 'pass' | 'receive' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
 export interface Tactics {
     formation: string;
     press: number;
@@ -28,6 +28,9 @@ export interface PlayerIntent {
     type: PlayerIntentType;
     target: Vector2;
     targetPlayerId?: string;
+    duration: number;
+    urgency: number;
+    tacticalRisk: number;
 }
 export interface SimulatedPlayer {
     id: string;
@@ -74,6 +77,8 @@ export interface ActiveBallAction {
     targetPlayer?: SimulatedPlayer;
     inaccurate: boolean;
     quality: number;
+    route?: string;
+    restartType?: RestartState['phase'];
 }
 export interface MatchState {
     time: number;
@@ -174,6 +179,7 @@ export default class RealTimeEngine {
     gameStarted: boolean;
     private random;
     private startedWithBallSide;
+    private baseTactics;
     private nextPhaseAfterSnapshot;
     private clearRestartAfterSnapshot;
     constructor(homeTeam: Team, awayTeam: Team, options?: Partial<RealTimeEngineOptions>);
@@ -187,6 +193,7 @@ export default class RealTimeEngine {
     private createBenchPlayers;
     private generateBenchPlayers;
     private fallbackAttributes;
+    private intent;
     private handleTimeBoundaries;
     private startedSecondHalfSide;
     private resetForKickoff;
@@ -202,6 +209,7 @@ export default class RealTimeEngine {
     private prepareGoalLineRestart;
     private prepareRestart;
     private placePlayersForRestart;
+    private updateTacticalState;
     private updateTacticalTargetPositions;
     private resetPlayersToFormation;
     private decidePlayerIntents;
@@ -226,10 +234,14 @@ export default class RealTimeEngine {
     private performSubstitution;
     private selectSubstituteFor;
     private isPenaltyFoul;
+    private ballIsInPenaltyArea;
     private penaltySpotFor;
     private detectLooseBallRecovery;
     private detectPassOutcome;
+    private detectGoalkeeperSetPieceAction;
+    private detectAerialDuel;
     private detectShotOutcome;
+    private detectShotBlock;
     private snapshot;
     private createEvent;
     private formationTargetsForRoles;
@@ -240,6 +252,8 @@ export default class RealTimeEngine {
     private formationSlots;
     private parseFormation;
     private selectPassTarget;
+    private passRoute;
+    private shotRoute;
     private selectRestartTaker;
     private selectThrowInTarget;
     private selectBoxTarget;
@@ -248,6 +262,15 @@ export default class RealTimeEngine {
     private safeRestartTarget;
     private cornerTargetPoint;
     private supportTarget;
+    private overlapTarget;
+    private boxEntryTarget;
+    private forwardRunTarget;
+    private driftWideTarget;
+    private betweenLinesTarget;
+    private trackRunnerTarget;
+    private coverLaneTarget;
+    private isWideDefender;
+    private isWideAttacker;
     private shootingIntentChance;
     private passQuality;
     private shotQuality;

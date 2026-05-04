@@ -30,6 +30,16 @@ export type MatchPhase =
 export type PlayerIntentType =
     'hold_shape'
     | 'press'
+    | 'cover_passing_lane'
+    | 'track_runner'
+    | 'overlap'
+    | 'underlap'
+    | 'attack_box'
+    | 'drop_between_lines'
+    | 'drift_wide'
+    | 'make_forward_run'
+    | 'recover_shape'
+    | 'support_carrier'
     | 'support'
     | 'receive'
     | 'dribble'
@@ -53,6 +63,10 @@ export type RealTimeEventType =
     | 'red_card'
     | 'injury'
     | 'substitution'
+    | 'aerial_duel'
+    | 'blocked_shot'
+    | 'goalkeeper_claim'
+    | 'goalkeeper_punch'
     | 'pass'
     | 'receive'
     | 'interception'
@@ -83,6 +97,9 @@ export interface PlayerIntent {
     type: PlayerIntentType;
     target: Vector2;
     targetPlayerId?: string;
+    duration: number;
+    urgency: number;
+    tacticalRisk: number;
 }
 
 export interface SimulatedPlayer {
@@ -133,6 +150,8 @@ export interface ActiveBallAction {
     targetPlayer?: SimulatedPlayer;
     inaccurate: boolean;
     quality: number;
+    route?: string;
+    restartType?: RestartState['phase'];
 }
 
 export interface MatchState {
@@ -270,6 +289,7 @@ export default class RealTimeEngine {
     gameStarted = false;
     private random: () => number;
     private startedWithBallSide: TeamSide | null = null;
+    private baseTactics: { home: Tactics, away: Tactics };
     private nextPhaseAfterSnapshot: MatchPhase | null = null;
     private clearRestartAfterSnapshot = false;
 
@@ -282,6 +302,10 @@ export default class RealTimeEngine {
 
         const homeTactics = this.tacticsFromOptions(options.homeTactics);
         const awayTactics = this.tacticsFromOptions(options.awayTactics);
+        this.baseTactics = {
+            home: { ...homeTactics },
+            away: { ...awayTactics },
+        };
         const homePlayers = this.createPlayers(homeTeam, 'home', homeTactics, homeTeam.players.slice(0, 11));
         const awayPlayers = this.createPlayers(awayTeam, 'away', awayTactics, awayTeam.players.slice(0, 11));
         const players = [
@@ -389,6 +413,7 @@ export default class RealTimeEngine {
             return this.commitSnapshot(this.resolvePhaseAction());
         }
 
+        this.updateTacticalState();
         this.updateTacticalTargetPositions();
         this.decidePlayerIntents();
 
@@ -473,10 +498,7 @@ export default class RealTimeEngine {
                 target: { ...target },
                 stamina: 100,
                 attributes: player.attributes,
-                currentIntent: {
-                    type: 'hold_shape',
-                    target: { ...target },
-                },
+                currentIntent: this.intent('hold_shape', { ...target }),
                 actionCooldown: 0,
                 foulsCommitted: 0,
                 foulsSuffered: 0,
@@ -565,6 +587,21 @@ export default class RealTimeEngine {
             rushingOut: 12,
             tendencyToPunch: 12,
             throwing: 12,
+        };
+    }
+
+    private intent(
+        type: PlayerIntentType,
+        target: Vector2,
+        options: Partial<Pick<PlayerIntent, 'targetPlayerId' | 'duration' | 'urgency' | 'tacticalRisk'>> = {},
+    ): PlayerIntent {
+        return {
+            type,
+            target,
+            targetPlayerId: options.targetPlayerId,
+            duration: options.duration ?? 2,
+            urgency: options.urgency ?? 0.5,
+            tacticalRisk: options.tacticalRisk ?? 0.25,
         };
     }
 
@@ -777,6 +814,8 @@ export default class RealTimeEngine {
             targetPlayer: targetPlayer || undefined,
             inaccurate: false,
             quality: 0.76,
+            route: outcome,
+            restartType: type,
         };
         taker.actionCooldown = 1.2;
         this.nextPhaseAfterSnapshot = 'open_play';
@@ -813,6 +852,8 @@ export default class RealTimeEngine {
             target: aimedTarget,
             inaccurate: quality < this.random(),
             quality,
+            route: outcome,
+            restartType: type,
         };
         taker.actionCooldown = 1.4;
         this.nextPhaseAfterSnapshot = 'open_play';
@@ -893,10 +934,11 @@ export default class RealTimeEngine {
             if (player === taker) {
                 player.x = restart.position.x;
                 player.y = restart.position.y;
-                player.currentIntent = {
-                    type: 'hold_shape',
-                    target: { ...restart.position },
-                };
+                player.currentIntent = this.intent('hold_shape', { ...restart.position }, {
+                    duration: 1.5,
+                    urgency: 0.4,
+                    tacticalRisk: 0.05,
+                });
 
                 return;
             }
@@ -908,11 +950,61 @@ export default class RealTimeEngine {
                 player.x = this.clamp(player.x + direction * 4, 0, pitch.length);
             }
 
-            player.currentIntent = {
-                type: 'hold_shape',
-                target: { ...player.target },
-            };
+            player.currentIntent = this.intent('hold_shape', { ...player.target }, {
+                duration: 2,
+                urgency: 0.35,
+                tacticalRisk: 0.08,
+            });
         });
+    }
+
+    private updateTacticalState(): void {
+        for (const side of ['home', 'away'] as TeamSide[]) {
+            const base = this.baseTactics[side];
+            const opponent = this.oppositeSide(side);
+            const minute = this.state.time / 60;
+            const scoreDiff = this.state.score[side] - this.state.score[opponent];
+            const players = this.playersForSide(side);
+            const averageStamina = players.length
+                ? players.reduce((sum, player) => sum + player.stamina, 0) / players.length
+                : 100;
+            const redCards = players.filter((player) => player.redCard).length + (11 - players.length);
+            const injuryLoad = players.filter((player) => player.injurySeverity !== 'none').length;
+            const cardLoad = players.reduce((sum, player) => sum + player.yellowCards, 0);
+            let press = base.press;
+            let tempo = base.tempo;
+            let mentality = base.mentality;
+
+            if (redCards > 0) {
+                press -= 14;
+                tempo -= 8;
+                mentality = 'defensive';
+            } else if (scoreDiff < 0 && minute >= 60) {
+                press += 10;
+                tempo += 12;
+                mentality = 'attacking';
+            } else if (scoreDiff > 0 && minute >= 75) {
+                press -= 8;
+                tempo -= 10;
+                mentality = 'defensive';
+            }
+
+            if (averageStamina < 58) {
+                press -= 8;
+                tempo -= 5;
+            }
+
+            if (cardLoad > 1 || injuryLoad > 0) {
+                press -= 4;
+            }
+
+            this.state.tactics[side] = {
+                ...base,
+                press: this.clamp(press, 0, 100),
+                tempo: this.clamp(tempo, 0, 100),
+                mentality,
+            };
+        }
     }
 
     private updateTacticalTargetPositions(): void {
@@ -960,10 +1052,7 @@ export default class RealTimeEngine {
                 player.x = target.x;
                 player.y = target.y;
                 player.target = { ...target };
-                player.currentIntent = {
-                    type: 'hold_shape',
-                    target: { ...target },
-                };
+                player.currentIntent = this.intent('hold_shape', { ...target });
                 player.actionCooldown = 0;
             });
         });
@@ -1001,11 +1090,14 @@ export default class RealTimeEngine {
         const goal = this.goalCenterAgainst(player.side);
         const distanceToGoal = this.distance(player, goal);
 
-        if (player.actionCooldown === 0 && distanceToGoal < 24 && this.random() < this.shootingIntentChance(player, distanceToGoal)) {
-            return {
-                type: 'shoot',
-                target: goal,
-            };
+        const shootingRange = midfieldPositions.includes(player.role) ? 32 : 26;
+
+        if (player.actionCooldown === 0 && distanceToGoal < shootingRange && this.random() < this.shootingIntentChance(player, distanceToGoal)) {
+            return this.intent('shoot', goal, {
+                duration: 1,
+                urgency: 0.9,
+                tacticalRisk: distanceToGoal > 24 ? 0.65 : 0.45,
+            });
         }
 
         if (player.actionCooldown > 0) {
@@ -1016,14 +1108,16 @@ export default class RealTimeEngine {
         const tempo = this.tactics(player.side).tempo / 100;
 
         if (player.actionCooldown === 0 && passTarget && this.random() < 0.25 + tempo * 0.45) {
-            return {
-                type: 'pass',
-                target: {
+            return this.intent('pass', {
                     x: passTarget.x,
                     y: passTarget.y,
                 },
+                {
                 targetPlayerId: passTarget.id,
-            };
+                    duration: 1,
+                    urgency: 0.7,
+                    tacticalRisk: this.distance(player, passTarget) > 25 ? 0.45 : 0.25,
+                });
         }
 
         return this.dribbleIntent(player);
@@ -1032,13 +1126,14 @@ export default class RealTimeEngine {
     private dribbleIntent(player: SimulatedPlayer): PlayerIntent {
         const direction = this.attackDirection(player.side);
 
-        return {
-            type: 'dribble',
-            target: this.clampPoint({
+        return this.intent('dribble', this.clampPoint({
                 x: player.x + direction * 8,
                 y: player.y + (pitch.width / 2 - player.y) * 0.2,
-            }),
-        };
+            }), {
+            duration: 2,
+            urgency: 0.62,
+            tacticalRisk: 0.38,
+        });
     }
 
     private intentForLooseBall(player: SimulatedPlayer): PlayerIntent {
@@ -1046,35 +1141,74 @@ export default class RealTimeEngine {
         const closest = this.closestPlayerTo(player.side, this.state.ball);
 
         if (closest === player || distanceToBall < 8) {
-            return {
-                type: 'recover',
-                target: {
+            return this.intent('recover', {
                     x: this.state.ball.x,
                     y: this.state.ball.y,
                 },
-            };
+                {
+                    duration: 1.5,
+                    urgency: 0.85,
+                    tacticalRisk: 0.25,
+                });
         }
 
-        return {
-            type: 'hold_shape',
-            target: { ...player.target },
-        };
+        return this.intent('recover_shape', { ...player.target }, {
+            duration: 2,
+            urgency: 0.5,
+            tacticalRisk: 0.12,
+        });
     }
 
     private intentForTeammateInPossession(player: SimulatedPlayer, ballOwner: SimulatedPlayer): PlayerIntent {
         const distanceToBall = this.distance(player, ballOwner);
+        const direction = this.attackDirection(player.side);
+        const advancedBall = direction > 0 ? ballOwner.x > pitch.length * 0.56 : ballOwner.x < pitch.length * 0.44;
 
-        if (distanceToBall < 28) {
-            return {
-                type: 'receive',
-                target: this.supportTarget(player, ballOwner),
-            };
+        if (this.isWideDefender(player) && distanceToBall < 34 && player.x * direction <= ballOwner.x * direction) {
+            return this.intent('overlap', this.overlapTarget(player, ballOwner), {
+                duration: 4,
+                urgency: 0.76,
+                tacticalRisk: 0.62,
+            });
         }
 
-        return {
-            type: 'support',
-            target: { ...player.target },
-        };
+        if (midfieldPositions.includes(player.role) && advancedBall) {
+            return this.intent('attack_box', this.boxEntryTarget(player.side, player), {
+                duration: 3,
+                urgency: 0.72,
+                tacticalRisk: 0.58,
+            });
+        }
+
+        if (attackPositions.includes(player.role) && distanceToBall > 12) {
+            return this.intent('make_forward_run', this.forwardRunTarget(player), {
+                duration: 3,
+                urgency: 0.78,
+                tacticalRisk: 0.5,
+            });
+        }
+
+        if (this.isWideAttacker(player)) {
+            return this.intent('drift_wide', this.driftWideTarget(player), {
+                duration: 3,
+                urgency: 0.56,
+                tacticalRisk: 0.34,
+            });
+        }
+
+        if (distanceToBall < 28) {
+            return this.intent('support_carrier', this.supportTarget(player, ballOwner), {
+                duration: 2,
+                urgency: 0.65,
+                tacticalRisk: 0.26,
+            });
+        }
+
+        return this.intent('drop_between_lines', this.betweenLinesTarget(player), {
+            duration: 2.5,
+            urgency: 0.45,
+            tacticalRisk: 0.2,
+        });
     }
 
     private intentForOutOfPossession(player: SimulatedPlayer, ballOwner: SimulatedPlayer): PlayerIntent {
@@ -1082,19 +1216,37 @@ export default class RealTimeEngine {
         const pressDistance = 8 + tactics.press * 0.18;
 
         if (this.distance(player, ballOwner) < pressDistance) {
-            return {
-                type: 'press',
-                target: {
+            return this.intent('press', {
                     x: ballOwner.x,
                     y: ballOwner.y,
-                },
-            };
+                }, {
+                    duration: 1.5,
+                    urgency: 0.82,
+                    tacticalRisk: 0.4,
+                });
         }
 
-        return {
-            type: 'hold_shape',
-            target: { ...player.target },
-        };
+        if (defencePositions.includes(player.role) && this.distance(player, ballOwner) < 22) {
+            return this.intent('track_runner', this.trackRunnerTarget(player, ballOwner), {
+                duration: 2,
+                urgency: 0.68,
+                tacticalRisk: 0.22,
+            });
+        }
+
+        if (midfieldPositions.includes(player.role)) {
+            return this.intent('cover_passing_lane', this.coverLaneTarget(player, ballOwner), {
+                duration: 2.5,
+                urgency: 0.52,
+                tacticalRisk: 0.18,
+            });
+        }
+
+        return this.intent('hold_shape', { ...player.target }, {
+            duration: 2,
+            urgency: 0.35,
+            tacticalRisk: 0.1,
+        });
     }
 
     private resolveBallAction(): RealTimeMatchEvent[] {
@@ -1133,6 +1285,7 @@ export default class RealTimeEngine {
         const quality = this.passQuality(owner, passDistance, pressure);
         const inaccurate = this.random() > quality;
         const miss = inaccurate ? this.randomPoint(5, 12) : { x: 0, y: 0 };
+        const route = this.passRoute(owner, targetPlayer);
         const target = {
             x: targetPlayer.x + miss.x,
             y: targetPlayer.y + miss.y,
@@ -1151,16 +1304,18 @@ export default class RealTimeEngine {
             targetPlayer,
             inaccurate,
             quality,
+            route,
         };
         owner.actionCooldown = 0.7 + (1 - this.tactics(owner.side).tempo / 100) * 0.8;
 
-        return this.createEvent('pass', owner, targetPlayer, inaccurate ? 'inaccurate' : 'accurate');
+        return this.createEvent('pass', owner, targetPlayer, inaccurate ? `${route}_inaccurate` : route);
     }
 
     private startShot(owner: SimulatedPlayer): RealTimeMatchEvent {
         const goal = this.goalCenterAgainst(owner.side);
         const distanceToGoal = this.distance(owner, goal);
         const quality = this.shotQuality(owner, distanceToGoal);
+        const route = this.shotRoute(owner, distanceToGoal);
         const target = {
             x: goal.x,
             y: goal.y + (this.random() - 0.5) * pitch.goalWidth * 1.8 * (1.1 - quality),
@@ -1178,10 +1333,11 @@ export default class RealTimeEngine {
             target,
             inaccurate: quality < this.random(),
             quality,
+            route,
         };
         owner.actionCooldown = 1.8;
 
-        return this.createEvent('shot', owner, undefined, quality > 0.65 ? 'clean' : 'under_pressure');
+        return this.createEvent('shot', owner, undefined, route);
     }
 
     private movePlayersAndBall(): void {
@@ -1470,10 +1626,11 @@ export default class RealTimeEngine {
         replacement.x = outgoing.x;
         replacement.y = outgoing.y;
         replacement.target = { ...outgoing.target };
-        replacement.currentIntent = {
-            type: 'hold_shape',
-            target: { ...outgoing.target },
-        };
+        replacement.currentIntent = this.intent('hold_shape', { ...outgoing.target }, {
+            duration: 2,
+            urgency: 0.5,
+            tacticalRisk: 0.1,
+        });
         replacement.actionCooldown = 1;
 
         const outgoingIndex = this.state.players.indexOf(outgoing);
@@ -1544,6 +1701,16 @@ export default class RealTimeEngine {
         return inPenaltyDepth && inPenaltyWidth;
     }
 
+    private ballIsInPenaltyArea(defendingSide: TeamSide, position: Vector2): boolean {
+        const ownGoal = this.goalCenterAgainst(this.oppositeSide(defendingSide));
+        const inPenaltyDepth = ownGoal.x === 0
+            ? position.x <= 18
+            : position.x >= pitch.length - 18;
+        const inPenaltyWidth = Math.abs(position.y - pitch.width / 2) <= 22;
+
+        return inPenaltyDepth && inPenaltyWidth;
+    }
+
     private penaltySpotFor(side: TeamSide): Vector2 {
         const goal = this.goalCenterAgainst(side);
         const direction = this.attackDirection(side);
@@ -1569,6 +1736,18 @@ export default class RealTimeEngine {
     }
 
     private detectPassOutcome(action: ActiveBallAction): RealTimeMatchEvent[] {
+        const goalkeeperEvent = this.detectGoalkeeperSetPieceAction(action);
+
+        if (goalkeeperEvent) {
+            return [goalkeeperEvent];
+        }
+
+        const aerialDuelEvent = this.detectAerialDuel(action);
+
+        if (aerialDuelEvent) {
+            return [aerialDuelEvent];
+        }
+
         const interceptor = this.playersAgainst(action.teamSide)
             .filter((player) => this.distance(player, this.state.ball) < 1.8)
             .sort((a, b) => this.distance(a, this.state.ball) - this.distance(b, this.state.ball))[0];
@@ -1598,7 +1777,106 @@ export default class RealTimeEngine {
         return [];
     }
 
+    private detectGoalkeeperSetPieceAction(action: ActiveBallAction): RealTimeMatchEvent | null {
+        if (!['corner', 'cross', 'winger_cutback'].includes(action.restartType || action.route || '')) {
+            return null;
+        }
+
+        const goalkeeper = this.goalkeeperFor(this.oppositeSide(action.teamSide));
+
+        if (!goalkeeper || this.distance(goalkeeper, this.state.ball) > 13 || !this.ballIsInPenaltyArea(goalkeeper.side, this.state.ball)) {
+            return null;
+        }
+
+        const claimChance = this.clamp(
+            0.18
+            + goalkeeper.attributes.aerialReach / 20 * 0.18
+            + goalkeeper.attributes.commandOfArea / 20 * 0.16
+            + goalkeeper.attributes.handling / 20 * 0.12
+            - action.quality * 0.08,
+            0.16,
+            0.68,
+        );
+        const roll = this.random();
+
+        this.state.activeBallAction = null;
+
+        if (roll < claimChance) {
+            this.state.ball.owner = goalkeeper;
+            this.state.ball.x = goalkeeper.x;
+            this.state.ball.y = goalkeeper.y;
+            this.state.ball.velocity = { x: 0, y: 0 };
+            this.registerTouch(goalkeeper);
+
+            return this.createEvent('goalkeeper_claim', goalkeeper, action.from, action.restartType || action.route);
+        }
+
+        if (roll < claimChance + goalkeeper.attributes.tendencyToPunch / 20 * 0.22) {
+            this.state.ball.owner = null;
+            this.state.ball.velocity = {
+                x: -this.attackDirection(action.teamSide) * (10 + this.random() * 8),
+                y: (this.random() - 0.5) * 12,
+            };
+            this.registerTouch(goalkeeper);
+
+            return this.createEvent('goalkeeper_punch', goalkeeper, action.from, action.restartType || action.route);
+        }
+
+        this.state.activeBallAction = action;
+
+        return null;
+    }
+
+    private detectAerialDuel(action: ActiveBallAction): RealTimeMatchEvent | null {
+        if (action.restartType !== 'goal_kick' || action.route !== 'long_kick' || !action.targetPlayer) {
+            return null;
+        }
+
+        if (this.distance(action.targetPlayer, this.state.ball) > 2.4) {
+            return null;
+        }
+
+        const opponent = this.nearestOpponent(action.teamSide, action.targetPlayer);
+
+        if (!opponent || this.distance(opponent, action.targetPlayer) > 5) {
+            return null;
+        }
+
+        const targetScore = action.targetPlayer.attributes.heading + action.targetPlayer.attributes.jumpingReach + action.targetPlayer.attributes.strength;
+        const opponentScore = opponent.attributes.heading + opponent.attributes.jumpingReach + opponent.attributes.strength;
+        const winChance = this.clamp(0.5 + (targetScore - opponentScore) / 120, 0.25, 0.75);
+        const roll = this.random();
+
+        this.state.activeBallAction = null;
+        this.state.ball.velocity = { x: 0, y: 0 };
+
+        if (roll < winChance) {
+            this.state.ball.owner = action.targetPlayer;
+            this.registerTouch(action.targetPlayer);
+
+            return this.createEvent('aerial_duel', action.targetPlayer, opponent, 'attacker_wins');
+        }
+
+        if (roll > 0.92) {
+            this.state.ball.owner = null;
+            this.state.ball.velocity = this.randomPoint(3, 8);
+
+            return this.createEvent('aerial_duel', action.targetPlayer, opponent, 'loose_second_ball');
+        }
+
+        this.state.ball.owner = opponent;
+        this.registerTouch(opponent);
+
+        return this.createEvent('aerial_duel', opponent, action.targetPlayer, 'defender_wins');
+    }
+
     private detectShotOutcome(action: ActiveBallAction): RealTimeMatchEvent[] {
+        const blockEvent = this.detectShotBlock(action);
+
+        if (blockEvent) {
+            return [blockEvent];
+        }
+
         const attackingDirection = this.attackDirection(action.teamSide);
         const crossedGoalLine = attackingDirection > 0
             ? this.state.ball.x >= pitch.length
@@ -1618,7 +1896,7 @@ export default class RealTimeEngine {
             this.state.ball.velocity = { x: 0, y: 0 };
             this.state.activeBallAction = null;
 
-            const goalEvent = this.createEvent('goal', action.from, undefined, action.quality > 0.7 ? 'well_placed' : 'finished');
+            const goalEvent = this.createEvent('goal', action.from, undefined, `${action.route || 'open_play'}_goal`);
             this.resetForKickoff(this.oppositeSide(action.teamSide));
             this.state.phase = 'kickoff';
             this.nextPhaseAfterSnapshot = 'open_play';
@@ -1631,16 +1909,53 @@ export default class RealTimeEngine {
         this.state.activeBallAction = null;
 
         if (inGoalFrame && goalkeeper) {
+            const spill = this.random() < 0.18;
+            const closeDown = this.distance(action.from, goalkeeper) < 16;
+
+            if (spill) {
+                this.state.ball.owner = null;
+                this.state.ball.x = this.clamp(goalkeeper.x + this.attackDirection(action.teamSide) * -2, 0, pitch.length);
+                this.state.ball.y = this.clamp(goalkeeper.y + (this.random() - 0.5) * 7, 0, pitch.width);
+                this.state.ball.velocity = { x: 0, y: 0 };
+
+                return [this.createEvent('save', goalkeeper, action.from, 'goalkeeper_spill')];
+            }
+
             this.state.ball.owner = goalkeeper;
+            this.state.ball.x = goalkeeper.x;
+            this.state.ball.y = goalkeeper.y;
             this.registerTouch(goalkeeper);
 
-            return [this.createEvent('save', goalkeeper, action.from)];
+            return [this.createEvent('save', goalkeeper, action.from, closeDown ? 'close_down_one_v_one' : 'positioned_save')];
         }
 
-        const missEvent = this.createEvent('miss', action.from);
+        const missEvent = this.createEvent('miss', action.from, undefined, `${action.route || 'open_play'}_miss`);
         const restartEvent = this.prepareGoalLineRestart(action.teamSide);
 
         return [missEvent, restartEvent];
+    }
+
+    private detectShotBlock(action: ActiveBallAction): RealTimeMatchEvent | null {
+        const blocker = this.playersAgainst(action.teamSide)
+            .filter((player) => player.role !== Position.GK && this.distance(player, this.state.ball) < 1.6)
+            .sort((a, b) => this.distance(a, this.state.ball) - this.distance(b, this.state.ball))[0];
+
+        if (!blocker) {
+            return null;
+        }
+
+        const blockChance = this.clamp(0.18 + blocker.attributes.bravery / 20 * 0.16 + blocker.attributes.positioning / 20 * 0.16 - action.quality * 0.18, 0.12, 0.55);
+
+        if (this.random() >= blockChance) {
+            return null;
+        }
+
+        this.state.ball.owner = null;
+        this.state.ball.velocity = this.randomPoint(5, 12);
+        this.state.activeBallAction = null;
+        this.registerTouch(blocker);
+
+        return this.createEvent('blocked_shot', blocker, action.from, action.route || 'shot_block');
     }
 
     private snapshot(events: RealTimeMatchEvent[]): MatchSnapshot {
@@ -1894,6 +2209,47 @@ export default class RealTimeEngine {
         return candidates[0]?.player || null;
     }
 
+    private passRoute(owner: SimulatedPlayer, target: SimulatedPlayer): string {
+        const direction = this.attackDirection(owner.side);
+        const forwardValue = (target.x - owner.x) * direction;
+        const widePass = Math.abs(target.y - pitch.width / 2) > 18;
+        const targetNearByline = direction > 0 ? target.x > pitch.length - 18 : target.x < 18;
+
+        if (forwardValue > 16 && attackPositions.includes(target.role)) {
+            return 'through_ball';
+        }
+
+        if (widePass && targetNearByline) {
+            return 'winger_cutback';
+        }
+
+        if (widePass && forwardValue > 8) {
+            return 'cross';
+        }
+
+        return 'progressive_pass';
+    }
+
+    private shotRoute(player: SimulatedPlayer, distanceToGoal: number): string {
+        if (player.currentIntent.type === 'attack_box' || (midfieldPositions.includes(player.role) && distanceToGoal < 20)) {
+            return 'midfielder_late_run';
+        }
+
+        if (distanceToGoal > 24) {
+            return 'long_shot';
+        }
+
+        if (defencePositions.includes(player.role)) {
+            return 'set_piece_defender';
+        }
+
+        if (this.isWideAttacker(player) && Math.abs(player.y - pitch.width / 2) > 12) {
+            return 'cut_inside';
+        }
+
+        return 'through_ball_to_striker';
+    }
+
     private selectRestartTaker(restart: RestartState): SimulatedPlayer {
         const players = this.playersForSide(restart.teamSide);
 
@@ -2016,12 +2372,86 @@ export default class RealTimeEngine {
         });
     }
 
+    private overlapTarget(player: SimulatedPlayer, ballOwner: SimulatedPlayer): Vector2 {
+        const direction = this.attackDirection(player.side);
+        const outsideLane = player.y < pitch.width / 2 ? 5 : pitch.width - 5;
+
+        return this.clampPoint({
+            x: Math.max(player.target.x * direction, ballOwner.x * direction + 12) * direction,
+            y: outsideLane,
+        });
+    }
+
+    private boxEntryTarget(side: TeamSide, player: SimulatedPlayer): Vector2 {
+        const goal = this.goalCenterAgainst(side);
+        const direction = this.attackDirection(side);
+
+        return this.clampPoint({
+            x: goal.x - direction * 15,
+            y: pitch.width / 2 + (player.y < pitch.width / 2 ? -8 : 8),
+        });
+    }
+
+    private forwardRunTarget(player: SimulatedPlayer): Vector2 {
+        const direction = this.attackDirection(player.side);
+
+        return this.clampPoint({
+            x: player.x + direction * 16,
+            y: player.y + (pitch.width / 2 - player.y) * 0.25,
+        });
+    }
+
+    private driftWideTarget(player: SimulatedPlayer): Vector2 {
+        const wideY = player.y < pitch.width / 2 ? 8 : pitch.width - 8;
+
+        return this.clampPoint({
+            x: player.target.x,
+            y: wideY,
+        });
+    }
+
+    private betweenLinesTarget(player: SimulatedPlayer): Vector2 {
+        const direction = this.attackDirection(player.side);
+
+        return this.clampPoint({
+            x: player.target.x - direction * 5,
+            y: player.target.y,
+        });
+    }
+
+    private trackRunnerTarget(player: SimulatedPlayer, ballOwner: SimulatedPlayer): Vector2 {
+        const direction = this.attackDirection(ballOwner.side);
+
+        return this.clampPoint({
+            x: ballOwner.x + direction * 4,
+            y: ballOwner.y,
+        });
+    }
+
+    private coverLaneTarget(player: SimulatedPlayer, ballOwner: SimulatedPlayer): Vector2 {
+        return this.clampPoint({
+            x: (player.target.x + ballOwner.x) / 2,
+            y: (player.target.y + ballOwner.y) / 2,
+        });
+    }
+
+    private isWideDefender(player: SimulatedPlayer): boolean {
+        return [Position.LB, Position.RB, Position.LWB, Position.RWB].includes(player.role);
+    }
+
+    private isWideAttacker(player: SimulatedPlayer): boolean {
+        return [Position.LM, Position.RM, Position.LW, Position.RW, Position.LF, Position.RF].includes(player.role);
+    }
+
     private shootingIntentChance(player: SimulatedPlayer, distanceToGoal: number): number {
         const finishing = player.attributes.finishing / 20;
+        const longShots = player.attributes.longShots / 20;
         const composure = player.attributes.composure / 20;
         const distanceScore = this.clamp(1 - distanceToGoal / 24, 0, 1);
+        const longShotBoost = distanceToGoal > 24 ? longShots * 0.18 : 0;
+        const mentalityBoost = this.tactics(player.side).mentality === 'attacking' ? 0.08 : this.tactics(player.side).mentality === 'defensive' ? -0.04 : 0;
 
-        return this.clamp(0.12 + finishing * 0.28 + composure * 0.16 + distanceScore * 0.3, 0.1, 0.72);
+        return this.clamp(0.12 + finishing * 0.24 + composure * 0.14 + distanceScore * 0.28 + longShotBoost + mentalityBoost, 0.08, 0.76);
     }
 
     private passQuality(player: SimulatedPlayer, passDistance: number, pressure: number): number {
@@ -2035,12 +2465,14 @@ export default class RealTimeEngine {
 
     private shotQuality(player: SimulatedPlayer, distanceToGoal: number): number {
         const finishing = player.attributes.finishing / 20;
+        const longShots = player.attributes.longShots / 20;
         const technique = player.attributes.technique / 20;
         const composure = player.attributes.composure / 20;
         const pressure = this.pressureAround(player);
         const distancePenalty = distanceToGoal / 60;
+        const rangeSkill = distanceToGoal > 24 ? longShots * 0.12 : finishing * 0.08;
 
-        return this.clamp(0.36 + finishing * 0.24 + technique * 0.16 + composure * 0.14 - pressure * 0.18 - distancePenalty - player.injuryPerformancePenalty * 0.2, 0.12, 0.88);
+        return this.clamp(0.34 + finishing * 0.18 + rangeSkill + technique * 0.16 + composure * 0.14 - pressure * 0.18 - distancePenalty - player.injuryPerformancePenalty * 0.2, 0.12, 0.88);
     }
 
     private pressureAround(player: SimulatedPlayer): number {
@@ -2065,14 +2497,16 @@ export default class RealTimeEngine {
         const pace = player.attributes.pace / 20;
         const acceleration = player.attributes.acceleration / 20;
         const stamina = this.clamp(player.stamina / 100, 0.55, 1);
-        const intentBoost = ['press', 'recover', 'dribble'].includes(player.currentIntent.type) ? 1.12 : 1;
+        const intenseIntents: PlayerIntentType[] = ['press', 'recover', 'dribble', 'overlap', 'attack_box', 'make_forward_run', 'track_runner'];
+        const intentBoost = intenseIntents.includes(player.currentIntent.type) ? 1.12 : 1;
         const injuryMultiplier = 1 - player.injuryPerformancePenalty;
 
         return (3.2 + pace * 2.4 + acceleration * 1.2) * stamina * intentBoost * injuryMultiplier;
     }
 
     private updateStamina(player: SimulatedPlayer): void {
-        const extraDrain = ['press', 'recover', 'dribble'].includes(player.currentIntent.type) ? 0.01 : 0.004;
+        const intenseIntents: PlayerIntentType[] = ['press', 'recover', 'dribble', 'overlap', 'attack_box', 'make_forward_run', 'track_runner'];
+        const extraDrain = intenseIntents.includes(player.currentIntent.type) ? 0.01 : 0.004;
 
         player.stamina = this.clamp(player.stamina - (0.005 + extraDrain) * this.tickSeconds, 35, 100);
     }
