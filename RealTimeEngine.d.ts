@@ -10,7 +10,7 @@ export type TeamSide = 'home' | 'away';
 export type Mentality = 'defensive' | 'balanced' | 'attacking';
 export type MatchPhase = 'kickoff' | 'open_play' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'injury_stoppage' | 'substitution' | 'half_time' | 'full_time';
 export type PlayerIntentType = 'hold_shape' | 'press' | 'cover_passing_lane' | 'track_runner' | 'overlap' | 'underlap' | 'attack_box' | 'drop_between_lines' | 'drift_wide' | 'make_forward_run' | 'recover_shape' | 'support_carrier' | 'support' | 'receive' | 'dribble' | 'pass' | 'shoot' | 'recover';
-export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'dribble' | 'challenge' | 'yellow_card' | 'red_card' | 'injury' | 'substitution' | 'aerial_duel' | 'blocked_shot' | 'goalkeeper_claim' | 'goalkeeper_punch' | 'pass' | 'receive' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
+export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'dribble' | 'challenge' | 'yellow_card' | 'red_card' | 'injury' | 'substitution' | 'advantage' | 'aerial_duel' | 'blocked_shot' | 'goalkeeper_claim' | 'goalkeeper_punch' | 'pass' | 'receive' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
 export interface Tactics {
     formation: string;
     press: number;
@@ -97,6 +97,10 @@ export interface MatchState {
     };
     activeBallAction: ActiveBallAction | null;
     restart: RestartState | null;
+    addedTime: {
+        firstHalf: number;
+        secondHalf: number;
+    };
     bench: {
         home: SimulatedPlayer[];
         away: SimulatedPlayer[];
@@ -148,6 +152,10 @@ export interface MatchSnapshot {
     time: number;
     period: 1 | 2 | 'ended';
     phase: MatchPhase;
+    addedTime: {
+        firstHalf: number;
+        secondHalf: number;
+    };
     score: {
         home: number;
         away: number;
@@ -193,6 +201,7 @@ export default class RealTimeEngine {
     simulate(untilSeconds?: number): MatchSnapshot[];
     tick(): MatchSlice;
     private commitSnapshot;
+    private registerAddedTime;
     private tacticsFromOptions;
     private refereeFromOptions;
     private createPlayers;
@@ -231,6 +240,7 @@ export default class RealTimeEngine {
     private detectEvents;
     private detectTackleOrFoul;
     private resolveFoul;
+    private shouldPlayAdvantage;
     private bookingEvents;
     private injuryEvents;
     private prepareFoulRestart;

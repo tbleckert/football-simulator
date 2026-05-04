@@ -446,6 +446,7 @@ assert.ok(shootingEngine.events.some((event) => event.type === 'shot'), 'forced 
 assert.ok(shootingEngine.events.some((event) => event.type === 'goal'), 'forced on-target shot should produce a goal event');
 assert.ok(shootingEngine.events.some((event) => event.type === 'goal' && event.replayWindow && event.replayWindow.startTime <= event.time && event.replayWindow.endTime >= event.time), 'goal events should expose a replay window around the scoring event');
 assert.equal(shootingEngine.state.score.home, 1, 'forced home goal should update the score');
+assert.ok(shootingEngine.state.addedTime.firstHalf > 0, 'goals should add stoppage time');
 assert.equal(shootingEngine.state.ball.owner?.side, 'away', 'conceding team should restart after a goal');
 assert.equal(shootingEngine.state.ball.x, 105 / 2, 'goal restart should put the ball on the center spot');
 assert.ok(shooter && shooter.x < 90, 'goal restart should reset the scorer back into team shape');
@@ -500,6 +501,60 @@ if (fouledPlayer && foulingPlayer) {
 
 assert.ok(foulEngine.events.some((event) => event.type === 'foul'), 'close defensive pressure should be able to produce a foul event');
 assert.ok(foulEngine.events.some((event) => event.type === 'free_kick'), 'fouls outside the box should create a free-kick restart');
+
+const advantageEngine = new RealTimeEngine(createTeam(true, 'Advantage Home', [
+    Position.GK,
+    Position.LB,
+    Position.LCB,
+    Position.RCB,
+    Position.RB,
+    Position.LM,
+    Position.LCM,
+    Position.RCM,
+    Position.RM,
+    Position.LF,
+    Position.RF,
+]), createTeam(false, 'Advantage Away', [
+    Position.GK,
+    Position.LB,
+    Position.LCB,
+    Position.RCB,
+    Position.RB,
+    Position.LCM,
+    Position.CM,
+    Position.RCM,
+    Position.LW,
+    Position.CF,
+    Position.RW,
+]), {
+    tickSeconds: 0.01,
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0, 0.99, 0.99]),
+});
+advantageEngine.start();
+
+const advantageCarrier = advantageEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const advantageSupport = advantageEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LF);
+const advantageDefender = advantageEngine.state.players.find((player) => player.side === 'away' && player.role === Position.LCB);
+
+assert.ok(advantageCarrier && advantageSupport && advantageDefender, 'the advantage scenario needs a carrier, support runner, and defender');
+
+if (advantageCarrier && advantageSupport && advantageDefender) {
+    advantageCarrier.x = 82;
+    advantageCarrier.y = 34;
+    advantageCarrier.actionCooldown = 5;
+    advantageSupport.x = 84;
+    advantageSupport.y = 39;
+    advantageDefender.x = 82.2;
+    advantageDefender.y = 34;
+    advantageEngine.state.ball.owner = advantageCarrier;
+    advantageEngine.state.ball.x = advantageCarrier.x;
+    advantageEngine.state.ball.y = advantageCarrier.y;
+    advantageEngine.tick();
+}
+
+assert.ok(advantageEngine.events.some((event) => event.type === 'advantage'), 'referees should be able to play advantage instead of stopping every foul');
+assert.equal(advantageEngine.events.some((event) => event.type === 'free_kick'), false, 'advantage should avoid an immediate free-kick restart');
 
 const cardEngine = new RealTimeEngine(createTeam(true, 'Card Home', [
     Position.GK,

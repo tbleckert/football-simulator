@@ -63,6 +63,7 @@ export type RealTimeEventType =
     | 'red_card'
     | 'injury'
     | 'substitution'
+    | 'advantage'
     | 'aerial_duel'
     | 'blocked_shot'
     | 'goalkeeper_claim'
@@ -171,6 +172,10 @@ export interface MatchState {
     };
     activeBallAction: ActiveBallAction | null;
     restart: RestartState | null;
+    addedTime: {
+        firstHalf: number;
+        secondHalf: number;
+    };
     bench: {
         home: SimulatedPlayer[];
         away: SimulatedPlayer[];
@@ -225,6 +230,10 @@ export interface MatchSnapshot {
     time: number;
     period: 1 | 2 | 'ended';
     phase: MatchPhase;
+    addedTime: {
+        firstHalf: number;
+        secondHalf: number;
+    };
     score: {
         home: number;
         away: number;
@@ -343,6 +352,10 @@ export default class RealTimeEngine {
             },
             activeBallAction: null,
             restart: null,
+            addedTime: {
+                firstHalf: 0,
+                secondHalf: 0,
+            },
             bench: {
                 home: this.createBenchPlayers(homeTeam, 'home', homeTactics),
                 away: this.createBenchPlayers(awayTeam, 'away', awayTactics),
@@ -438,6 +451,7 @@ export default class RealTimeEngine {
 
     private commitSnapshot(events: RealTimeMatchEvent[]): MatchSlice {
         this.events.push(...events);
+        this.registerAddedTime(events);
 
         const snapshot = this.snapshot(events);
         this.snapshots.push(snapshot);
@@ -453,6 +467,40 @@ export default class RealTimeEngine {
         }
 
         return { state: this.state, events, snapshot };
+    }
+
+    private registerAddedTime(events: RealTimeMatchEvent[]): void {
+        const addedSeconds = events.reduce((total, event) => {
+            if (event.type === 'goal') {
+                return total + 25;
+            }
+
+            if (event.type === 'injury') {
+                return total + 35;
+            }
+
+            if (event.type === 'substitution') {
+                return total + 20;
+            }
+
+            if (['yellow_card', 'red_card', 'penalty'].includes(event.type)) {
+                return total + 10;
+            }
+
+            return total;
+        }, 0);
+
+        if (!addedSeconds || this.state.period === 'ended') {
+            return;
+        }
+
+        if (this.state.period === 1) {
+            this.state.addedTime.firstHalf += addedSeconds;
+
+            return;
+        }
+
+        this.state.addedTime.secondHalf += addedSeconds;
     }
 
     private tacticsFromOptions(options?: Partial<Tactics>): Tactics {
@@ -613,9 +661,11 @@ export default class RealTimeEngine {
 
     private handleTimeBoundaries(): RealTimeMatchEvent[] {
         const halfTime = this.matchLengthSeconds / 2;
+        const halfTimeWithAdded = halfTime + this.state.addedTime.firstHalf;
+        const fullTimeWithAdded = this.matchLengthSeconds + this.state.addedTime.secondHalf;
 
-        if (this.state.period === 1 && this.state.time >= halfTime) {
-            this.state.time = halfTime;
+        if (this.state.period === 1 && this.state.time >= halfTimeWithAdded) {
+            this.state.time = halfTimeWithAdded;
             this.state.period = 2;
             this.state.phase = 'half_time';
             this.resetForKickoff(this.startedSecondHalfSide());
@@ -627,8 +677,8 @@ export default class RealTimeEngine {
             ];
         }
 
-        if (this.state.time >= this.matchLengthSeconds) {
-            this.state.time = this.matchLengthSeconds;
+        if (this.state.time >= fullTimeWithAdded) {
+            this.state.time = fullTimeWithAdded;
             this.state.period = 'ended';
             this.state.phase = 'full_time';
             this.state.ball.owner = null;
@@ -1446,9 +1496,37 @@ export default class RealTimeEngine {
             ...this.bookingEvents(defender, fouledPlayer),
             ...this.injuryEvents(fouledPlayer, 'heavy_challenge'),
         ];
+
+        if (this.shouldPlayAdvantage(defender, fouledPlayer)) {
+            this.state.ball.owner = fouledPlayer;
+            this.state.ball.velocity = { x: 0, y: 0 };
+            this.registerTouch(fouledPlayer);
+
+            return [
+                ...events,
+                this.createEvent('advantage', fouledPlayer, defender, 'advantage_played'),
+            ];
+        }
+
         const restartEvent = this.prepareFoulRestart(defender, fouledPlayer);
 
         return [...events, restartEvent];
+    }
+
+    private shouldPlayAdvantage(defender: SimulatedPlayer, fouledPlayer: SimulatedPlayer): boolean {
+        if (fouledPlayer.injurySeverity === 'forced' || defender.redCard) {
+            return false;
+        }
+
+        const direction = this.attackDirection(fouledPlayer.side);
+        const attackingProgress = (fouledPlayer.x - pitch.length / 2) * direction;
+        const nearbySupport = this.playersForSide(fouledPlayer.side)
+            .some((player) => player !== fouledPlayer && this.distance(player, fouledPlayer) < 12);
+
+        return attackingProgress > 24
+            && nearbySupport
+            && this.state.referee.advantagePatience >= 40
+            && !this.isPenaltyFoul(defender.side, fouledPlayer);
     }
 
     private bookingEvents(defender: SimulatedPlayer, fouledPlayer: SimulatedPlayer): RealTimeMatchEvent[] {
@@ -1971,6 +2049,7 @@ export default class RealTimeEngine {
             time: this.state.time,
             period: this.state.period,
             phase: this.state.phase,
+            addedTime: { ...this.state.addedTime },
             score: { ...this.state.score },
             ball: {
                 x: this.round(this.state.ball.x),
