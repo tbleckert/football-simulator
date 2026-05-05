@@ -227,7 +227,9 @@ main {
 .player,
 .target,
 .ball,
-.restart-zone {
+.restart-zone,
+.pass-target,
+.second-ball-marker {
     position: absolute;
 }
 
@@ -298,6 +300,25 @@ main {
     transform: translate(-50%, -50%);
 }
 
+.pass-target {
+    z-index: 2;
+    width: 1.15rem;
+    aspect-ratio: 1;
+    border: 2px solid #fff;
+    background: rgba(240, 213, 247, 0.32);
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.second-ball-marker {
+    z-index: 2;
+    width: 1.45rem;
+    aspect-ratio: 1;
+    border: 2px dashed var(--brand-alternate-color);
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.18);
+    transform: translate(-50%, -50%);
+}
+
 .player {
     display: grid;
     place-items: center;
@@ -350,6 +371,60 @@ main {
     font-family: var(--font-mono);
 }
 
+.match-report {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.8fr);
+    gap: 1.25rem;
+    width: min(960px, 100%);
+    margin: calc(var(--gutter-y) * -0.8) auto var(--gutter-y);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-small);
+}
+
+.match-report dl {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.match-report div {
+    padding: 0.75rem;
+    background: var(--brand-alternate-color);
+}
+
+.match-report dt,
+.match-report dd {
+    margin: 0;
+}
+
+.match-report dt {
+    color: var(--subtle-color);
+    text-transform: uppercase;
+}
+
+.match-report dd {
+    font-size: 1.15rem;
+    font-weight: 900;
+}
+
+.match-report table {
+    background: var(--brand-secondary-color);
+}
+
+.match-report th,
+.match-report td {
+    padding: 0.35rem 0.65rem;
+}
+
+.match-report th {
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.match-report td {
+    text-align: right;
+}
+
 .inspector {
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr);
@@ -369,7 +444,7 @@ main {
 
 .inspector dl {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 0.75rem;
 }
 
@@ -513,6 +588,14 @@ table {
     }
 
     .inspector dl {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .match-report {
+        grid-template-columns: 1fr;
+    }
+
+    .match-report dl {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 

@@ -60,6 +60,20 @@
                 style:top={`${y(snapshot.ball.y)}%`}
             ></div>
         {/if}
+        {#if snapshot.activePassTarget}
+            <div
+                class="pass-target"
+                style:left={`${x(snapshot.activePassTarget.x)}%`}
+                style:top={`${y(snapshot.activePassTarget.y)}%`}
+            ></div>
+        {/if}
+        {#if snapshot.secondBall}
+            <div
+                class="second-ball-marker"
+                style:left={`${x(snapshot.secondBall.x)}%`}
+                style:top={`${y(snapshot.secondBall.y)}%`}
+            ></div>
+        {/if}
         {#each snapshot.players as player}
             <div
                 class:home={player.teamSide === 'home'}

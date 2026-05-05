@@ -28,7 +28,7 @@
 
     $: snapshot = snapshots[index] as MatchSnapshot;
     $: elapsedEvents = eventsUntil(events, snapshot);
-    $: report = reportFor(events, snapshot);
+    $: report = reportFor(events, snapshot, snapshots);
     $: goals = formatScoreSheet(elapsedEvents);
     $: allGoals = formatScoreSheet(events);
     $: selectedPlayer = snapshot.players.find((player) => player.id === selectedPlayerId) || snapshot.players.find((player) => player.id === snapshot.ball.ownerId);
@@ -98,6 +98,18 @@
         const outcome = event.outcome ? ` · ${event.outcome.replace(/_/g, ' ')}` : '';
 
         return `${event.type.replace(/_/g, ' ')} ${player}${outcome}`;
+    }
+
+    function formatPercent(value: number): string {
+        return `${Math.round(value * 100)}%`;
+    }
+
+    function formatDecimal(value: number): string {
+        return value.toFixed(1);
+    }
+
+    function restartLabel(type: string): string {
+        return type.replace(/_/g, ' ');
     }
 
     function filterEvents(source: RealTimeMatchEvent[], filter: string): RealTimeMatchEvent[] {
@@ -278,6 +290,45 @@
 
     <Pitch {snapshot} {selectedPlayerId} on:selectPlayer={selectPlayer} />
 
+    <section class="match-report" aria-label="Match report">
+        <dl>
+            <div>
+                <dt>Avg possession</dt>
+                <dd>{formatDecimal(report.match.averagePossessionPasses)}</dd>
+            </div>
+            <div>
+                <dt>Longest</dt>
+                <dd>{report.match.longestPossession}</dd>
+            </div>
+            <div>
+                <dt>Owned</dt>
+                <dd>{formatPercent(report.match.ballOwnedShare)}</dd>
+            </div>
+            <div>
+                <dt>Loose</dt>
+                <dd>{formatPercent(report.match.looseBallShare)}</dd>
+            </div>
+        </dl>
+        <table>
+            <thead>
+                <tr>
+                    <th>Restart</th>
+                    <th>Awards</th>
+                    <th>Exec</th>
+                </tr>
+            </thead>
+            <tbody>
+                {#each Object.entries(report.match.restarts) as [type, restarts]}
+                    <tr>
+                        <th>{restartLabel(type)}</th>
+                        <td>{restarts.awards}</td>
+                        <td>{restarts.executions}</td>
+                    </tr>
+                {/each}
+            </tbody>
+        </table>
+    </section>
+
     {#if selectedPlayer}
         <section class="inspector" aria-label="Selected player">
             <div>
@@ -288,6 +339,14 @@
                 <div>
                     <dt>Intent</dt>
                     <dd>{selectedPlayer.currentIntent.type.replace(/_/g, ' ')}</dd>
+                </div>
+                <div>
+                    <dt>Target</dt>
+                    <dd>{Math.round(selectedPlayer.target.x)}, {Math.round(selectedPlayer.target.y)}</dd>
+                </div>
+                <div>
+                    <dt>Intent target</dt>
+                    <dd>{Math.round(selectedPlayer.currentIntent.target.x)}, {Math.round(selectedPlayer.currentIntent.target.y)}</dd>
                 </div>
                 <div>
                     <dt>Stamina</dt>

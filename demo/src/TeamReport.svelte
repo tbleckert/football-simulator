@@ -37,6 +37,10 @@
                 <td>{report.passes}</td>
             </tr>
             <tr>
+                <th>Pass completion</th>
+                <td>{Math.round(report.passCompletion * 100)}%</td>
+            </tr>
+            <tr>
                 <th>Shots</th>
                 <td>{report.shots}</td>
             </tr>

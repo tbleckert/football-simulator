@@ -10,6 +10,8 @@ import { Position } from '$simulator/enums/Position';
 export interface TeamStats {
     possession: number;
     passes: number;
+    completedPasses: number;
+    passCompletion: number;
     shots: number;
     shotsOnGoal: number;
     tackles: number;
@@ -18,9 +20,23 @@ export interface TeamStats {
     redCards: number;
 }
 
+export interface RestartStats {
+    awards: number;
+    executions: number;
+}
+
+export interface MatchStats {
+    averagePossessionPasses: number;
+    longestPossession: number;
+    looseBallShare: number;
+    ballOwnedShare: number;
+    restarts: Record<string, RestartStats>;
+}
+
 export interface SimulationReport {
     home: TeamStats;
     away: TeamStats;
+    match: MatchStats;
 }
 
 export interface Simulation {
@@ -139,6 +155,24 @@ const baseAttributes: PlayerAttributes = {
     throwing: 12,
 };
 
+const restartTypes = ['throw_in', 'corner', 'goal_kick', 'free_kick', 'penalty'];
+const restartAwardOutcomes = new Set(['touchline', 'goal_line', 'foul', 'penalty_foul']);
+const possessionEventTypes = new Set([
+    'kickoff',
+    'throw_in',
+    'corner',
+    'goal_kick',
+    'free_kick',
+    'penalty',
+    'pass',
+    'receive',
+    'interception',
+    'tackle',
+    'recovery',
+    'save',
+    'goalkeeper_claim',
+]);
+
 export function createSimulation(): Simulation {
     const homeTeam = createTeam(true, 'Juventus', homePositions, homeNames, homeNumbers);
     const awayTeam = createTeam(false, 'Milan', awayPositions, awayNames, awayNumbers);
@@ -171,8 +205,9 @@ export function createSimulation(): Simulation {
     };
 }
 
-export function reportFor(events: RealTimeMatchEvent[], snapshot: MatchSnapshot): SimulationReport {
+export function reportFor(events: RealTimeMatchEvent[], snapshot: MatchSnapshot, snapshots: MatchSnapshot[] = []): SimulationReport {
     const elapsedEvents = events.filter((event) => event.time <= snapshot.time);
+    const elapsedSnapshots = snapshots.filter((candidate) => candidate.time <= snapshot.time);
     const report = {
         home: emptyStats(),
         away: emptyStats(),
@@ -183,21 +218,17 @@ export function reportFor(events: RealTimeMatchEvent[], snapshot: MatchSnapshot)
             return;
         }
 
-        report[event.teamSide].possession += 1;
         registerEvent(report[event.teamSide], event);
     });
 
-    const totalOwnership = report.home.possession + report.away.possession;
+    applySnapshotPossession(report, elapsedSnapshots);
+    finalizeTeamStats(report.home);
+    finalizeTeamStats(report.away);
 
     return {
-        home: {
-            ...report.home,
-            possession: totalOwnership ? report.home.possession / totalOwnership : 0,
-        },
-        away: {
-            ...report.away,
-            possession: totalOwnership ? report.away.possession / totalOwnership : 0,
-        },
+        home: report.home,
+        away: report.away,
+        match: matchStats(elapsedEvents, elapsedSnapshots),
     };
 }
 
@@ -278,6 +309,10 @@ function registerEvent(stats: TeamStats, event: RealTimeMatchEvent): void {
         stats.passes += 1;
     }
 
+    if (event.type === 'receive') {
+        stats.completedPasses += 1;
+    }
+
     if (event.type === 'shot') {
         stats.shots += 1;
     }
@@ -307,6 +342,8 @@ function emptyStats(): TeamStats {
     return {
         possession: 0,
         passes: 0,
+        completedPasses: 0,
+        passCompletion: 0,
         shots: 0,
         shotsOnGoal: 0,
         tackles: 0,
@@ -314,6 +351,112 @@ function emptyStats(): TeamStats {
         yellowCards: 0,
         redCards: 0,
     };
+}
+
+function applySnapshotPossession(report: { home: TeamStats, away: TeamStats }, snapshots: MatchSnapshot[]): void {
+    let homeOwned = 0;
+    let awayOwned = 0;
+
+    snapshots.forEach((snapshot) => {
+        const owner = snapshot.players.find((player) => player.id === snapshot.ball.ownerId);
+
+        if (owner?.teamSide === 'home') {
+            homeOwned += 1;
+        }
+
+        if (owner?.teamSide === 'away') {
+            awayOwned += 1;
+        }
+    });
+
+    const totalOwned = homeOwned + awayOwned;
+
+    report.home.possession = totalOwned ? homeOwned / totalOwned : 0;
+    report.away.possession = totalOwned ? awayOwned / totalOwned : 0;
+}
+
+function finalizeTeamStats(stats: TeamStats): void {
+    stats.passCompletion = stats.passes ? stats.completedPasses / stats.passes : 0;
+}
+
+function matchStats(events: RealTimeMatchEvent[], snapshots: MatchSnapshot[]): MatchStats {
+    const possessions = possessionsFromEvents(events);
+    const looseSnapshots = snapshots.filter((snapshot) => !snapshot.ball.ownerId);
+
+    return {
+        averagePossessionPasses: average(possessions.map((possession) => possession.passes)),
+        longestPossession: Math.max(0, ...possessions.map((possession) => possession.passes)),
+        looseBallShare: ratio(looseSnapshots.length, snapshots.length),
+        ballOwnedShare: ratio(snapshots.length - looseSnapshots.length, snapshots.length),
+        restarts: restartStats(events),
+    };
+}
+
+function possessionsFromEvents(events: RealTimeMatchEvent[]): { side: TeamSide, passes: number }[] {
+    const possessions: { side: TeamSide, passes: number }[] = [];
+    let active: { side: TeamSide, passes: number } | null = null;
+
+    events.forEach((event) => {
+        if (!event.teamSide || !possessionEventTypes.has(event.type)) {
+            return;
+        }
+
+        if (!active || active.side !== event.teamSide) {
+            if (active) {
+                possessions.push(active);
+            }
+
+            active = {
+                side: event.teamSide,
+                passes: 0,
+            };
+        }
+
+        if (event.type === 'pass') {
+            active.passes += 1;
+        }
+    });
+
+    if (active) {
+        possessions.push(active);
+    }
+
+    return possessions;
+}
+
+function restartStats(events: RealTimeMatchEvent[]): Record<string, RestartStats> {
+    const stats = Object.fromEntries(restartTypes.map((type) => [
+        type,
+        { awards: 0, executions: 0 },
+    ])) as Record<string, RestartStats>;
+
+    events.forEach((event) => {
+        if (!restartTypes.includes(event.type)) {
+            return;
+        }
+
+        if (restartAwardOutcomes.has(event.outcome || '')) {
+            stats[event.type].awards += 1;
+
+            return;
+        }
+
+        stats[event.type].executions += 1;
+    });
+
+    return stats;
+}
+
+function average(values: number[]): number {
+    if (!values.length) {
+        return 0;
+    }
+
+    return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function ratio(value: number, total: number): number {
+    return total ? value / total : 0;
 }
 
 function seededRandom(seed: number): () => number {
