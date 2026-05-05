@@ -356,6 +356,28 @@ if (cornerTaker && cornerTarget && goalkeeper) {
 
 assert.ok(goalkeeperEngine.events.some((event) => event.type === 'goalkeeper_claim'), 'goalkeepers should be able to claim crosses and corners');
 
+const dribbleEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.99, 0]),
+});
+dribbleEngine.start();
+
+const dribbler = dribbleEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+
+assert.ok(dribbler, 'the dribble scenario needs a midfielder');
+
+if (dribbler) {
+    dribbler.x = 50;
+    dribbler.y = 34;
+    dribbler.actionCooldown = 0;
+    dribbleEngine.state.ball.owner = dribbler;
+    dribbleEngine.state.ball.x = dribbler.x;
+    dribbleEngine.state.ball.y = dribbler.y;
+    dribbleEngine.tick();
+}
+
+assert.ok(dribbleEngine.events.some((event) => event.type === 'dribble'), 'ball carriers should be able to dribble into space');
+
 const halfTimeEngine = new RealTimeEngine(homeTeam, awayTeam, {
     matchLengthSeconds: 120,
     random: seededRandom(99),
@@ -501,6 +523,58 @@ if (fouledPlayer && foulingPlayer) {
 
 assert.ok(foulEngine.events.some((event) => event.type === 'foul'), 'close defensive pressure should be able to produce a foul event');
 assert.ok(foulEngine.events.some((event) => event.type === 'free_kick'), 'fouls outside the box should create a free-kick restart');
+
+const penaltyEngine = new RealTimeEngine(createTeam(true, 'Penalty Home', [
+    Position.GK,
+    Position.LB,
+    Position.LCB,
+    Position.RCB,
+    Position.RB,
+    Position.LM,
+    Position.LCM,
+    Position.RCM,
+    Position.RM,
+    Position.LF,
+    Position.RF,
+]), createTeam(false, 'Penalty Away', [
+    Position.GK,
+    Position.LB,
+    Position.LCB,
+    Position.RCB,
+    Position.RB,
+    Position.LCM,
+    Position.CM,
+    Position.RCM,
+    Position.LW,
+    Position.CF,
+    Position.RW,
+]), {
+    tickSeconds: 0.01,
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0, 0.99, 0.99, 0]),
+});
+penaltyEngine.start();
+
+const penaltyCarrier = penaltyEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const penaltyDefender = penaltyEngine.state.players.find((player) => player.side === 'away' && player.role === Position.LCB);
+
+assert.ok(penaltyCarrier && penaltyDefender, 'the penalty scenario needs a carrier and defender');
+
+if (penaltyCarrier && penaltyDefender) {
+    penaltyCarrier.x = 96;
+    penaltyCarrier.y = 34;
+    penaltyCarrier.actionCooldown = 5;
+    penaltyDefender.x = 96.2;
+    penaltyDefender.y = 34;
+    penaltyEngine.state.ball.owner = penaltyCarrier;
+    penaltyEngine.state.ball.x = penaltyCarrier.x;
+    penaltyEngine.state.ball.y = penaltyCarrier.y;
+    penaltyEngine.tick();
+    penaltyEngine.tick();
+}
+
+assert.ok(penaltyEngine.events.some((event) => event.type === 'penalty' && event.outcome === 'penalty_foul'), 'box fouls should award penalties');
+assert.ok(penaltyEngine.events.some((event) => event.type === 'penalty' && event.outcome === 'goal'), 'penalties should execute with goal/save/miss outcomes');
 
 const advantageEngine = new RealTimeEngine(createTeam(true, 'Advantage Home', [
     Position.GK,
