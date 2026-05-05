@@ -6,6 +6,7 @@
     "start": "npm run demo",
     "demo": "vite --host 127.0.0.1",
     "demo:build": "vite build",
+    "analyse": "node --loader ts-node/esm --experimental-specifier-resolution=node test/analyse.ts",
     "test": "npm run test:realtime",
     "test:realtime": "node --loader ts-node/esm --experimental-specifier-resolution=node test/realtime.ts",
     "build": "tsc"

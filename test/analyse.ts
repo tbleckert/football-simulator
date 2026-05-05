@@ -1,0 +1,387 @@
+import Player, { type PlayerAttributes } from '../Player';
+import RealTimeEngine, {
+    type MatchSnapshot,
+    type RealTimeMatchEvent,
+    type TeamSide,
+} from '../RealTimeEngine';
+import Team from '../Team';
+import { Position } from '../enums/Position';
+
+interface RestartStats {
+    awards: number;
+    executions: number;
+}
+
+interface Possession {
+    side: TeamSide;
+    passes: number;
+}
+
+interface MatchAnalysis {
+    seed: number;
+    score: {
+        home: number;
+        away: number;
+    };
+    passes: number;
+    receptions: number;
+    passCompletion: number;
+    shots: number;
+    goals: number;
+    averagePossessionPasses: number;
+    longestPossession: number;
+    possessionsWithThreePasses: number;
+    looseBallShare: number;
+    ballOwnedShare: number;
+    passesEndingInRestartShare: number;
+    restarts: Record<string, RestartStats>;
+    shotRoutes: Record<string, number>;
+    passRoutes: Record<string, number>;
+    topPassers: Record<string, number>;
+    topShooters: Record<string, number>;
+}
+
+const defaultSeeds = [20260504, 20260505, 20260506, 20260507, 20260508];
+const restartTypes = ['throw_in', 'corner', 'goal_kick', 'free_kick', 'penalty'];
+const restartAwardOutcomes = new Set(['touchline', 'goal_line', 'foul', 'penalty_foul']);
+
+const baseAttributes: PlayerAttributes = {
+    aggression: 12,
+    anticipation: 12,
+    bravery: 12,
+    composure: 12,
+    concentration: 12,
+    decisions: 12,
+    determination: 12,
+    flair: 12,
+    leadership: 12,
+    offTheBall: 12,
+    positioning: 12,
+    teamwork: 12,
+    vision: 12,
+    workRate: 12,
+    acceleration: 12,
+    agility: 12,
+    balance: 12,
+    jumpingReach: 12,
+    naturalFitness: 12,
+    pace: 12,
+    stamina: 12,
+    strength: 12,
+    corners: 12,
+    crossing: 12,
+    dribbling: 12,
+    finishing: 12,
+    firstTouch: 12,
+    freeKickTaking: 12,
+    heading: 12,
+    longShots: 12,
+    longThrows: 12,
+    marking: 12,
+    passing: 12,
+    penaltyTaking: 12,
+    tackling: 12,
+    technique: 12,
+    aerialReach: 12,
+    commandOfArea: 12,
+    communication: 12,
+    eccentricity: 12,
+    handling: 12,
+    oneOnOnes: 12,
+    reflexes: 12,
+    rushingOut: 12,
+    tendencyToPunch: 12,
+    throwing: 12,
+};
+
+const homePositions = [
+    Position.GK,
+    Position.LB,
+    Position.LCB,
+    Position.RCB,
+    Position.RB,
+    Position.LM,
+    Position.LCM,
+    Position.RCM,
+    Position.RM,
+    Position.LF,
+    Position.RF,
+];
+
+const awayPositions = [
+    Position.GK,
+    Position.LB,
+    Position.LCB,
+    Position.RCB,
+    Position.RB,
+    Position.LCM,
+    Position.CM,
+    Position.RCM,
+    Position.LW,
+    Position.CF,
+    Position.RW,
+];
+
+function analyseMatch(seed: number): MatchAnalysis {
+    const homeTeam = createTeam(true, 'Home', homePositions);
+    const awayTeam = createTeam(false, 'Away', awayPositions);
+    const engine = new RealTimeEngine(homeTeam, awayTeam, {
+        random: seededRandom(seed),
+        homeTactics: {
+            formation: '4-4-2',
+            press: 62,
+            width: 58,
+            tempo: 66,
+            mentality: 'attacking',
+        },
+        awayTactics: {
+            formation: '4-3-3',
+            press: 48,
+            width: 52,
+            tempo: 42,
+            mentality: 'balanced',
+        },
+    });
+    const snapshots = engine.simulate(90 * 60);
+    const events = engine.events;
+    const finalSnapshot = snapshots[snapshots.length - 1] as MatchSnapshot;
+    const passes = events.filter((event) => event.type === 'pass');
+    const receptions = events.filter((event) => event.type === 'receive');
+    const shots = events.filter((event) => event.type === 'shot');
+    const goals = events.filter((event) => event.type === 'goal');
+    const possessions = possessionsFromEvents(events);
+    const looseSnapshots = snapshots.filter((snapshot) => !snapshot.ball.ownerId);
+    const passRestartCount = countPassesEndingInRestarts(events);
+
+    return {
+        seed,
+        score: finalSnapshot.score,
+        passes: passes.length,
+        receptions: receptions.length,
+        passCompletion: ratio(receptions.length, passes.length),
+        shots: shots.length,
+        goals: goals.length,
+        averagePossessionPasses: average(possessions.map((possession) => possession.passes)),
+        longestPossession: Math.max(0, ...possessions.map((possession) => possession.passes)),
+        possessionsWithThreePasses: ratio(possessions.filter((possession) => possession.passes >= 3).length, possessions.length),
+        looseBallShare: ratio(looseSnapshots.length, snapshots.length),
+        ballOwnedShare: ratio(snapshots.length - looseSnapshots.length, snapshots.length),
+        passesEndingInRestartShare: ratio(passRestartCount, passes.length),
+        restarts: restartStats(events),
+        shotRoutes: countBy(shots, (event) => event.outcome || 'open_play'),
+        passRoutes: countBy(passes, (event) => event.outcome || 'open_play'),
+        topPassers: topCounts(passes),
+        topShooters: topCounts(shots),
+    };
+}
+
+function possessionsFromEvents(events: RealTimeMatchEvent[]): Possession[] {
+    const possessions: Possession[] = [];
+    let active: Possession | null = null;
+
+    for (const event of events) {
+        if (!event.teamSide || event.type === 'match_start' || event.type === 'full_time') {
+            continue;
+        }
+
+        if (!active || active.side !== event.teamSide) {
+            if (active) {
+                possessions.push(active);
+            }
+
+            active = {
+                side: event.teamSide,
+                passes: 0,
+            };
+        }
+
+        if (event.type === 'pass') {
+            active.passes += 1;
+        }
+    }
+
+    if (active) {
+        possessions.push(active);
+    }
+
+    return possessions;
+}
+
+function countPassesEndingInRestarts(events: RealTimeMatchEvent[]): number {
+    return events.reduce((total, event, index) => {
+        if (event.type !== 'pass') {
+            return total;
+        }
+
+        const nextDecidingEvent = events
+            .slice(index + 1)
+            .find((candidate) => {
+                return ['pass', 'receive', 'interception', 'recovery', 'tackle', 'throw_in', 'corner', 'goal_kick'].includes(candidate.type);
+            });
+
+        if (!nextDecidingEvent || !restartTypes.includes(nextDecidingEvent.type)) {
+            return total;
+        }
+
+        return total + 1;
+    }, 0);
+}
+
+function restartStats(events: RealTimeMatchEvent[]): Record<string, RestartStats> {
+    const stats = Object.fromEntries(restartTypes.map((type) => [
+        type,
+        { awards: 0, executions: 0 },
+    ])) as Record<string, RestartStats>;
+
+    events.forEach((event) => {
+        if (!restartTypes.includes(event.type)) {
+            return;
+        }
+
+        if (restartAwardOutcomes.has(event.outcome || '')) {
+            stats[event.type].awards += 1;
+
+            return;
+        }
+
+        stats[event.type].executions += 1;
+    });
+
+    return stats;
+}
+
+function countBy(events: RealTimeMatchEvent[], keyForEvent: (event: RealTimeMatchEvent) => string): Record<string, number> {
+    return events.reduce<Record<string, number>>((counts, event) => {
+        const key = keyForEvent(event);
+
+        counts[key] = (counts[key] || 0) + 1;
+
+        return counts;
+    }, {});
+}
+
+function topCounts(events: RealTimeMatchEvent[]): Record<string, number> {
+    const counts = countBy(events, (event) => {
+        const side = event.teamSide ? event.teamSide.toUpperCase() : 'MATCH';
+        const name = event.player?.info.name || 'Unknown';
+
+        return `${side} ${name}`;
+    });
+
+    return Object.fromEntries(
+        Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5),
+    );
+}
+
+function createTeam(home: boolean, name: string, positions: Position[]): Team {
+    const players = positions.map((position, index) => new Player(
+        {
+            name: `${name} ${Position[position]}`,
+            number: index + 1,
+        },
+        {
+            height: 180,
+            weight: 75,
+        },
+        attributesForPosition(position),
+        position,
+    ));
+
+    return new Team(home, name, players);
+}
+
+function attributesForPosition(position: Position): PlayerAttributes {
+    const attributes = { ...baseAttributes };
+
+    if ([Position.LF, Position.CF, Position.RF, Position.ST, Position.LW, Position.RW].includes(position)) {
+        attributes.finishing = 18;
+        attributes.composure = 17;
+        attributes.offTheBall = 16;
+        attributes.pace = 15;
+    }
+
+    if ([Position.LCM, Position.CM, Position.RCM, Position.LM, Position.RM].includes(position)) {
+        attributes.passing = 17;
+        attributes.vision = 16;
+        attributes.decisions = 16;
+        attributes.stamina = 16;
+    }
+
+    if ([Position.LB, Position.LCB, Position.CB, Position.RCB, Position.RB].includes(position)) {
+        attributes.tackling = 17;
+        attributes.marking = 16;
+        attributes.positioning = 16;
+        attributes.strength = 15;
+    }
+
+    if (position === Position.GK) {
+        attributes.handling = 17;
+        attributes.reflexes = 17;
+        attributes.oneOnOnes = 17;
+        attributes.positioning = 16;
+    }
+
+    return attributes;
+}
+
+function average(values: number[]): number {
+    if (!values.length) {
+        return 0;
+    }
+
+    return round(values.reduce((total, value) => total + value, 0) / values.length);
+}
+
+function ratio(value: number, total: number): number {
+    return total ? round(value / total) : 0;
+}
+
+function round(value: number): number {
+    return Math.round(value * 1000) / 1000;
+}
+
+function seededRandom(seed: number): () => number {
+    let value = seed;
+
+    return () => {
+        value = (value * 16807) % 2147483647;
+
+        return (value - 1) / 2147483646;
+    };
+}
+
+function seedsFromArgs(): number[] {
+    const seedArgument = process.argv.find((argument) => argument.startsWith('--seeds='));
+
+    if (!seedArgument) {
+        return defaultSeeds;
+    }
+
+    const seeds = seedArgument
+        .replace('--seeds=', '')
+        .split(',')
+        .map((seed) => Number.parseInt(seed, 10))
+        .filter((seed) => Number.isFinite(seed));
+
+    return seeds.length ? seeds : defaultSeeds;
+}
+
+const matches = seedsFromArgs().map((seed) => analyseMatch(seed));
+
+console.log(JSON.stringify({
+    matches,
+    averages: {
+        passes: average(matches.map((match) => match.passes)),
+        passCompletion: average(matches.map((match) => match.passCompletion)),
+        shots: average(matches.map((match) => match.shots)),
+        goals: average(matches.map((match) => match.goals)),
+        averagePossessionPasses: average(matches.map((match) => match.averagePossessionPasses)),
+        longestPossession: average(matches.map((match) => match.longestPossession)),
+        possessionsWithThreePasses: average(matches.map((match) => match.possessionsWithThreePasses)),
+        looseBallShare: average(matches.map((match) => match.looseBallShare)),
+        ballOwnedShare: average(matches.map((match) => match.ballOwnedShare)),
+        passesEndingInRestartShare: average(matches.map((match) => match.passesEndingInRestartShare)),
+    },
+}, null, 2));
