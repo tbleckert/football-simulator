@@ -3461,13 +3461,13 @@ export default class RealTimeEngine {
             .filter((candidate) => candidate !== player && this.distance(candidate, player) < 18)
             .length;
         const distanceChance = distanceToGoal < 12
-            ? 0.022
+            ? 0.026
             : distanceToGoal < 18
-                ? 0.011
+                ? 0.013
                 : distanceToGoal < 24
-                    ? 0.004
+                    ? 0.005
                     : 0.001;
-        const longShotBoost = distanceToGoal > 24 ? longShots * 0.002 : 0;
+        const longShotBoost = distanceToGoal > 24 ? longShots * 0.0012 : 0;
         const mentalityBoost = this.tactics(player.side).mentality === 'attacking' ? 0.002 : this.tactics(player.side).mentality === 'defensive' ? -0.003 : 0;
         const supportPatience = supportOptions >= 2 && distanceToGoal > 12 ? 0.009 : 0;
 
@@ -3481,7 +3481,7 @@ export default class RealTimeEngine {
             - anglePenalty * 0.018
             - supportPatience,
             0.003,
-            distanceToGoal > 24 ? 0.006 : 0.045,
+            distanceToGoal > 24 ? 0.004 : 0.045,
         );
     }
 
@@ -3491,7 +3491,7 @@ export default class RealTimeEngine {
         const decisions = player.attributes.decisions / 20;
         const distancePenalty = passDistance / 155;
 
-        return this.clamp(0.64 + passing * 0.16 + technique * 0.11 + decisions * 0.1 - pressure * 0.12 - distancePenalty - player.injuryPerformancePenalty * 0.16, 0.46, 0.96);
+        return this.clamp(0.66 + passing * 0.16 + technique * 0.11 + decisions * 0.1 - pressure * 0.12 - distancePenalty - player.injuryPerformancePenalty * 0.16, 0.46, 0.96);
     }
 
     private shotQuality(player: SimulatedPlayer, distanceToGoal: number, route: string): number {
