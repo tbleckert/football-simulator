@@ -329,6 +329,7 @@ export default class RealTimeEngine {
     private passTargetZone;
     private keepOverhitPassInPlayChance;
     private detectGoalkeeperSetPieceAction;
+    private detectGoalkeeperSweep;
     private detectAerialDuel;
     private detectShotOutcome;
     private detectShotBlock;
@@ -343,12 +344,16 @@ export default class RealTimeEngine {
     private formationSlots;
     private parseFormation;
     private selectPassTarget;
+    private passRouteSelectionBonus;
     private passTargetPoint;
     private passTargetKind;
     private passSpeed;
     private passMissDistance;
     private receiveDifficulty;
     private passRoute;
+    private canPlayThroughBall;
+    private runnerSeparation;
+    private passingLanePressure;
     private shotRoute;
     private selectRestartTaker;
     private selectThrowInTarget;
@@ -359,6 +364,7 @@ export default class RealTimeEngine {
     private cornerTargetPoint;
     private supportTarget;
     private overlapTarget;
+    private underlapTarget;
     private boxEntryTarget;
     private forwardRunTarget;
     private driftWideTarget;
@@ -367,9 +373,12 @@ export default class RealTimeEngine {
     private coverLaneTarget;
     private isWideDefender;
     private isWideAttacker;
+    private isWideCarrier;
+    private hasOverlappingSupport;
     private shootingIntentChance;
     private passQuality;
     private shotQuality;
+    private shotRouteQualityBoost;
     private pressureAround;
     private interceptionChance;
     private playerSpeed;
@@ -398,6 +407,7 @@ export default class RealTimeEngine {
     private routeLedAttackPattern;
     private attackPatternFromZones;
     private attackPatternFromPassRoute;
+    private attackPatternFromShotRoute;
     private registerTouch;
     private mirrorForSide;
     private mentalityShift;
@@ -405,6 +415,7 @@ export default class RealTimeEngine {
     private ballIsSlow;
     private ballOutsidePitch;
     private distance;
+    private distanceToSegment;
     private clampPoint;
     private clampPassTarget;
     private clamp;
