@@ -2,6 +2,7 @@ import assert from 'assert';
 import { Position } from '../enums/Position';
 import Player from '../Player';
 import RealTimeEngine from '../RealTimeEngine';
+import RealTimeReporter from '../RealTimeReporter';
 import Team from '../Team';
 import type { PlayerAttributes } from '../Player';
 import type { MatchSnapshot } from '../RealTimeEngine';
@@ -310,6 +311,15 @@ assert.ok(allEvents.includes('kickoff'), 'the event stream should include kickof
 assert.ok(allEvents.includes('pass'), 'the event stream should include passes');
 assert.ok(openPlayEvents.length > 0, 'the event stream should include open-play events');
 assert.ok(Math.max(...possessionPassCounts(engine.events)) >= 5, 'teams should be able to complete a 5-pass sequence');
+
+const realTimeReport = new RealTimeReporter(engine).getReport();
+
+assert.ok(realTimeReport.headline.includes('Home'), 'real-time reports should expose a scoreline headline');
+assert.ok(realTimeReport.summary.length > 80, 'real-time reports should summarize why the match played out that way');
+assert.ok(realTimeReport.sections.some((section) => section.title === 'Tactical pattern'), 'real-time reports should explain the tactical pattern');
+assert.ok(realTimeReport.sections.some((section) => section.title === 'Chance creation'), 'real-time reports should explain chance creation');
+assert.ok(realTimeReport.sections.some((section) => section.title === 'Pressing'), 'real-time reports should explain pressing impact');
+assert.ok(realTimeReport.sections.some((section) => section.title === 'Player impact'), 'real-time reports should explain player impact');
 
 const throwInEngine = new RealTimeEngine(homeTeam, awayTeam, {
     matchLengthSeconds: 10,

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import type { MatchSnapshot, RealTimeMatchEvent } from '$simulator/RealTimeEngine';
+    import RealTimeReporter from '$simulator/RealTimeReporter';
     import Pitch from './Pitch.svelte';
     import TeamReport from './TeamReport.svelte';
     import {
@@ -37,6 +38,7 @@
     $: shotEvents = elapsedEvents.filter((event) => event.type === 'shot');
     $: passRouteEntries = Object.entries(report.match.passRoutes).sort((a, b) => b[1] - a[1]).slice(0, 6);
     $: shotRouteEntries = Object.entries(report.match.shotRoutes).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    $: matchStory = snapshot.period === 'ended' ? new RealTimeReporter(simulation.engine).getReport() : null;
     $: if (allGoals.length && selectedGoalIndex >= allGoals.length) {
         selectedGoalIndex = allGoals.length - 1;
     }
@@ -458,6 +460,32 @@
                     <dd>{formatChance(allGoals[selectedGoalIndex].chanceQuality)}</dd>
                 </div>
             </dl>
+        </section>
+    {/if}
+
+    {#if matchStory}
+        <section class="story-report" aria-label="Match story">
+            <h2>{matchStory.headline}</h2>
+            <p>{matchStory.summary}</p>
+            <div class="story-report__sections">
+                {#each matchStory.sections as section}
+                    <article>
+                        <h3>{section.title}</h3>
+                        <p>{section.text}</p>
+                    </article>
+                {/each}
+            </div>
+            {#if matchStory.turningPoints.length}
+                <ol>
+                    {#each matchStory.turningPoints as point}
+                        <li>
+                            <span>{formatTime(point.time || 0)}</span>
+                            <strong>{point.title}</strong>
+                            <p>{point.text}</p>
+                        </li>
+                    {/each}
+                </ol>
+            {/if}
         </section>
     {/if}
 

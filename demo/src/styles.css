@@ -466,7 +466,8 @@ main {
 }
 
 .route-summary,
-.goal-context {
+.goal-context,
+.story-report {
     width: min(960px, 100%);
     margin: 0 auto var(--gutter-y);
     font-family: var(--font-mono);
@@ -503,6 +504,59 @@ main {
 .goal-context dt {
     color: var(--subtle-color);
     text-transform: uppercase;
+}
+
+.story-report {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+}
+
+.story-report h2,
+.story-report h3,
+.story-report p {
+    margin: 0;
+}
+
+.story-report h2 {
+    font-size: 1.4rem;
+}
+
+.story-report__sections {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.story-report article,
+.story-report li {
+    padding: 0.75rem;
+    background: var(--brand-alternate-color);
+}
+
+.story-report h3,
+.story-report strong,
+.story-report span {
+    text-transform: uppercase;
+}
+
+.story-report h3,
+.story-report strong {
+    display: block;
+    margin-bottom: 0.35rem;
+}
+
+.story-report span {
+    color: var(--subtle-color);
+}
+
+.story-report ol {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
 
 .inspector {
@@ -677,6 +731,10 @@ table {
 
     .match-report dl {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .story-report__sections {
+        grid-template-columns: 1fr;
     }
 
     .score-sheet__item {

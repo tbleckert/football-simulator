@@ -30,6 +30,8 @@ Snapshots include match time, score, ball position and velocity, all 22 player p
 
 Tactical presets (`balanced`, `possession`, `direct`, `counter`, `low_block`, and `high_press`) provide readable defaults for press, width, tempo, defensive line, compactness, mentality, and attacking focus. Individual values can still be overridden per team.
 
+`RealTimeReporter` turns the completed simulation into a match story with tactical pattern, chance creation, pressing, player impact, manager impact, and turning-point sections.
+
 ## Development
 
 1. `npm install`
