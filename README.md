@@ -32,6 +32,8 @@ Tactical presets (`balanced`, `possession`, `direct`, `counter`, `low_block`, an
 
 `RealTimeReporter` turns the completed simulation into a match story with tactical pattern, chance creation, pressing, player impact, manager impact, and turning-point sections.
 
+`SeasonSimulator` runs a fixture list on top of `RealTimeEngine` and returns the table, top player outputs, tactical style aggregates, and league-level plausibility metrics.
+
 ## Development
 
 1. `npm install`
