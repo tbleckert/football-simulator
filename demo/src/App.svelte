@@ -33,6 +33,10 @@
     $: allGoals = formatScoreSheet(events);
     $: selectedPlayer = snapshot.players.find((player) => player.id === selectedPlayerId) || snapshot.players.find((player) => player.id === snapshot.ball.ownerId);
     $: filteredEvents = filterEvents(elapsedEvents, eventFilter);
+    $: recentShot = elapsedEvents.filter((event) => ['shot', 'goal', 'save', 'miss', 'blocked_shot', 'penalty'].includes(event.type)).slice(-1)[0];
+    $: shotEvents = elapsedEvents.filter((event) => event.type === 'shot');
+    $: passRouteEntries = Object.entries(report.match.passRoutes).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    $: shotRouteEntries = Object.entries(report.match.shotRoutes).sort((a, b) => b[1] - a[1]).slice(0, 6);
     $: if (allGoals.length && selectedGoalIndex >= allGoals.length) {
         selectedGoalIndex = allGoals.length - 1;
     }
@@ -112,13 +116,37 @@
         return type.replace(/_/g, ' ');
     }
 
+    function diagnosticLabel(type: string | null | undefined): string {
+        return (type || 'none').replace(/_/g, ' ');
+    }
+
+    function formatChance(value: number | undefined): string {
+        return typeof value === 'number' ? value.toFixed(2) : '-';
+    }
+
+    function pitchX(value: number): number {
+        return value / 105 * 100;
+    }
+
+    function pitchY(value: number): number {
+        return value / 68 * 100;
+    }
+
     function filterEvents(source: RealTimeMatchEvent[], filter: string): RealTimeMatchEvent[] {
         if (filter === 'goals') {
             return source.filter((event) => event.type === 'goal' || event.type === 'penalty');
         }
 
+        if (filter === 'passes') {
+            return source.filter((event) => ['pass', 'receive', 'interception'].includes(event.type));
+        }
+
         if (filter === 'shots') {
             return source.filter((event) => ['shot', 'save', 'miss', 'goal', 'blocked_shot'].includes(event.type));
+        }
+
+        if (filter === 'second_balls') {
+            return source.filter((event) => ['second_ball', 'recovery', 'aerial_duel'].includes(event.type));
         }
 
         if (filter === 'set_pieces') {
@@ -259,7 +287,9 @@
             <select bind:value={eventFilter}>
                 <option value="all">All</option>
                 <option value="goals">Goals</option>
+                <option value="passes">Passes</option>
                 <option value="shots">Shots</option>
+                <option value="second_balls">Second balls</option>
                 <option value="set_pieces">Set pieces</option>
                 <option value="discipline">Discipline</option>
                 <option value="stoppages">Stoppages</option>
@@ -308,6 +338,38 @@
                 <dt>Loose</dt>
                 <dd>{formatPercent(report.match.looseBallShare)}</dd>
             </div>
+            <div>
+                <dt>Possession</dt>
+                <dd>#{snapshot.possession.id}</dd>
+            </div>
+            <div>
+                <dt>Passes</dt>
+                <dd>{snapshot.possession.passCount}</dd>
+            </div>
+            <div>
+                <dt>Zone</dt>
+                <dd>{diagnosticLabel(snapshot.fieldZones[0])}</dd>
+            </div>
+            <div>
+                <dt>Pattern</dt>
+                <dd>{diagnosticLabel(snapshot.activeAttackPattern)}</dd>
+            </div>
+            <div>
+                <dt>Last pass</dt>
+                <dd>{diagnosticLabel(snapshot.possession.lastSuccessfulPassRoute)}</dd>
+            </div>
+            <div>
+                <dt>Chance</dt>
+                <dd>{formatChance(recentShot?.chanceQuality)}</dd>
+            </div>
+            <div>
+                <dt>Final third</dt>
+                <dd>{report.match.finalThirdEntries}</dd>
+            </div>
+            <div>
+                <dt>Box entries</dt>
+                <dd>{report.match.boxEntries}</dd>
+            </div>
         </dl>
         <table>
             <thead>
@@ -327,7 +389,77 @@
                 {/each}
             </tbody>
         </table>
+        <table>
+            <thead>
+                <tr>
+                    <th>Pass route</th>
+                    <th>Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                {#each passRouteEntries as [route, count]}
+                    <tr>
+                        <th>{diagnosticLabel(route)}</th>
+                        <td>{count}</td>
+                    </tr>
+                {/each}
+            </tbody>
+        </table>
+        <table>
+            <thead>
+                <tr>
+                    <th>Shot route</th>
+                    <th>Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                {#each shotRouteEntries as [route, count]}
+                    <tr>
+                        <th>{diagnosticLabel(route)}</th>
+                        <td>{count}</td>
+                    </tr>
+                {/each}
+            </tbody>
+        </table>
+        <div class="shot-map" aria-label="Shot map">
+            {#each shotEvents as shot}
+                <span
+                    style:left={`${pitchX(shot.position.x)}%`}
+                    style:top={`${pitchY(shot.position.y)}%`}
+                    title={`${diagnosticLabel(shot.outcome)} ${formatChance(shot.chanceQuality)}`}
+                ></span>
+            {/each}
+        </div>
+        <div class="route-summary">
+            <span>Cross {report.match.crosses.completed}/{report.match.crosses.attempted}</span>
+            <span>Cutback {report.match.cutbacks.completed}/{report.match.cutbacks.attempted}</span>
+            <span>Through {report.match.throughBalls.completed}/{report.match.throughBalls.attempted}</span>
+            <span>Switch {report.match.switches.completed}/{report.match.switches.attempted}</span>
+        </div>
     </section>
+
+    {#if allGoals[selectedGoalIndex]}
+        <section class="goal-context" aria-label="Goal context">
+            <dl>
+                <div>
+                    <dt>Goal route</dt>
+                    <dd>{diagnosticLabel(allGoals[selectedGoalIndex].outcome?.replace(/_goal$/, ''))}</dd>
+                </div>
+                <div>
+                    <dt>Possession</dt>
+                    <dd>#{allGoals[selectedGoalIndex].possession.id}</dd>
+                </div>
+                <div>
+                    <dt>Passes</dt>
+                    <dd>{allGoals[selectedGoalIndex].possession.passCount}</dd>
+                </div>
+                <div>
+                    <dt>Chance</dt>
+                    <dd>{formatChance(allGoals[selectedGoalIndex].chanceQuality)}</dd>
+                </div>
+            </dl>
+        </section>
+    {/if}
 
     {#if selectedPlayer}
         <section class="inspector" aria-label="Selected player">

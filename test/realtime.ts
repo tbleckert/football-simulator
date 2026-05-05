@@ -140,6 +140,16 @@ function velocityTowards(from: { x: number, y: number }, to: { x: number, y: num
     };
 }
 
+function engineInternals(engine: RealTimeEngine): {
+    passRoute: (owner: RealTimeEngine['state']['players'][number], target: RealTimeEngine['state']['players'][number]) => string;
+    shotRoute: (player: RealTimeEngine['state']['players'][number], distanceToGoal: number) => string;
+} {
+    return engine as unknown as {
+        passRoute: (owner: RealTimeEngine['state']['players'][number], target: RealTimeEngine['state']['players'][number]) => string;
+        shotRoute: (player: RealTimeEngine['state']['players'][number], distanceToGoal: number) => string;
+    };
+}
+
 function possessionPassCounts(events: { type: string, teamSide?: string }[]): number[] {
     const possessionEvents = new Set([
         'kickoff',
@@ -248,6 +258,10 @@ assert.ok(finalSnapshot.ball.y >= 0 && finalSnapshot.ball.y <= 68, 'ball y shoul
 assert.ok(finalSnapshot.players.every((player) => finitePoint(player)), 'player coordinates should stay finite');
 assert.ok(finalSnapshot.players.every((player) => finitePoint(player.target)), 'player tactical targets should stay finite');
 assert.ok(finalSnapshot.players.every((player) => player.currentIntent.type.length > 0), 'every player should expose a current intent');
+assert.ok(firstSnapshot.possession.id > 0, 'snapshots should expose the active possession id');
+assert.ok(firstSnapshot.fieldZones.length > 0, 'snapshots should expose current field zones');
+assert.ok(firstSnapshot.activeAttackPattern.length > 0, 'snapshots should expose the active attack pattern');
+assert.ok(engine.events.some((event) => event.possession.id > 0 && event.fieldZones.length > 0), 'events should expose possession context and field zones');
 assert.equal(firstSnapshot.phase, 'kickoff', 'the opening snapshot should expose the kickoff phase');
 assert.ok(['open_play', 'full_time'].includes(finalSnapshot.phase), 'the requested simulation window should expose a live or full-time phase');
 assert.ok(allEvents.includes('match_start'), 'the event stream should include match start');
@@ -334,6 +348,33 @@ if (wideCarrier && overlappingFullback) {
     assert.ok(typeof fullbackSnapshot?.currentIntent.duration === 'number', 'intents should expose duration');
     assert.ok(typeof fullbackSnapshot?.currentIntent.urgency === 'number', 'intents should expose urgency');
     assert.ok(typeof fullbackSnapshot?.currentIntent.tacticalRisk === 'number', 'intents should expose tactical risk');
+}
+
+const underlapEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: seededRandom(140),
+});
+underlapEngine.start();
+
+const isolatedWideCarrier = underlapEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const underlappingMidfielder = underlapEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+
+assert.ok(isolatedWideCarrier && underlappingMidfielder, 'the underlap scenario needs a wide carrier and midfielder');
+
+if (isolatedWideCarrier && underlappingMidfielder) {
+    isolatedWideCarrier.x = 72;
+    isolatedWideCarrier.y = 10;
+    isolatedWideCarrier.actionCooldown = 5;
+    underlappingMidfielder.x = 66;
+    underlappingMidfielder.y = 24;
+    underlapEngine.state.ball.owner = isolatedWideCarrier;
+    underlapEngine.state.ball.x = isolatedWideCarrier.x;
+    underlapEngine.state.ball.y = isolatedWideCarrier.y;
+
+    const underlapSlice = underlapEngine.tick();
+    const midfielderSnapshot = underlapSlice.snapshot.players.find((player) => player.id === underlappingMidfielder.id);
+
+    assert.equal(midfielderSnapshot?.currentIntent.type, 'underlap', 'midfielders should underlap when an advanced wide carrier is isolated');
 }
 
 const tacticsEngine = new RealTimeEngine(homeTeam, awayTeam, {
@@ -1076,6 +1117,56 @@ if (secondBallPasser && secondBallReceiver) {
 assert.ok(secondBallEngine.events.some((event) => event.type === 'second_ball'), 'a slightly misplaced pass should become a second ball');
 assert.ok(secondBallEngine.state.secondBall, 'second-ball state should stay visible for nearby players to attack');
 
+const blockedCrossEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0.8]),
+});
+blockedCrossEngine.start();
+
+const blockedCrossPasser = blockedCrossEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RM);
+const blockedCrossReceiver = blockedCrossEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const crossBlocker = blockedCrossEngine.state.players.find((player) => player.side === 'away' && player.role === Position.LCB);
+
+assert.ok(blockedCrossPasser && blockedCrossReceiver && crossBlocker, 'the blocked-cross scenario needs a crosser, receiver, and blocker');
+
+if (blockedCrossPasser && blockedCrossReceiver && crossBlocker) {
+    blockedCrossPasser.x = 84;
+    blockedCrossPasser.y = 8;
+    blockedCrossReceiver.x = 94;
+    blockedCrossReceiver.y = 34;
+    crossBlocker.x = 94;
+    crossBlocker.y = 34;
+    blockedCrossEngine.state.ball.owner = null;
+    blockedCrossEngine.state.ball.x = crossBlocker.x;
+    blockedCrossEngine.state.ball.y = crossBlocker.y;
+    blockedCrossEngine.state.ball.velocity = { x: 0, y: 0 };
+    blockedCrossEngine.state.activeBallAction = {
+        type: 'pass',
+        from: blockedCrossPasser,
+        teamSide: 'home',
+        origin: {
+            x: blockedCrossPasser.x,
+            y: blockedCrossPasser.y,
+        },
+        target: {
+            x: blockedCrossReceiver.x,
+            y: blockedCrossReceiver.y,
+        },
+        targetPlayer: blockedCrossReceiver,
+        inaccurate: true,
+        quality: 0.62,
+        estimatedArrivalTime: blockedCrossEngine.state.time,
+        passSpeed: 16,
+        receiveDifficulty: 0.42,
+        targetKind: 'contest',
+        route: 'cross',
+    };
+    blockedCrossEngine.tick();
+}
+
+assert.ok(blockedCrossEngine.events.some((event) => event.type === 'second_ball' && event.outcome === 'blocked_cross_second_ball'), 'blocked crosses should be able to create recoverable second balls');
+
 const recycleEngine = new RealTimeEngine(homeTeam, awayTeam, {
     matchLengthSeconds: 10,
     random: queuedRandom([0.99, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0, 0]),
@@ -1097,6 +1188,76 @@ if (recyclingCenterBack) {
 }
 
 assert.ok(recycleEngine.events.some((event) => event.type === 'pass' && ['lateral_support', 'backward_reset'].includes(event.outcome || '')), 'a low-pressure center back should be able to recycle possession');
+
+const routeEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: seededRandom(141),
+});
+routeEngine.start();
+
+const routeCarrier = routeEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const routeReceiver = routeEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LF);
+const routeMidfielder = routeEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+const routeForward = routeEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LF);
+
+assert.ok(routeCarrier && routeReceiver && routeMidfielder && routeForward, 'route classification scenarios need attackers and midfielders');
+
+if (routeCarrier && routeReceiver && routeMidfielder && routeForward) {
+    const internals = engineInternals(routeEngine);
+
+    routeCarrier.x = 101;
+    routeCarrier.y = 8;
+    routeReceiver.x = 94;
+    routeReceiver.y = 34;
+    assert.equal(internals.passRoute(routeCarrier, routeReceiver), 'cutback', 'a byline wide player should look for a central cutback');
+
+    routeCarrier.x = 82;
+    routeCarrier.y = 8;
+    routeReceiver.x = 94;
+    routeReceiver.y = 34;
+    assert.equal(internals.passRoute(routeCarrier, routeReceiver), 'cross', 'a deeper wide player should be able to choose a cross');
+
+    routeCarrier.x = 64;
+    routeCarrier.y = 34;
+    routeForward.x = 84;
+    routeForward.y = 34;
+    routeForward.currentIntent = {
+        type: 'hold_shape',
+        target: {
+            x: routeForward.x,
+            y: routeForward.y,
+        },
+        duration: 1,
+        urgency: 0.5,
+        tacticalRisk: 0.2,
+    };
+    assert.notEqual(internals.passRoute(routeCarrier, routeForward), 'through_ball', 'through balls should not be selected without a forward run');
+
+    routeForward.currentIntent = {
+        type: 'make_forward_run',
+        target: {
+            x: 94,
+            y: 34,
+        },
+        duration: 3,
+        urgency: 0.8,
+        tacticalRisk: 0.5,
+    };
+    routeEngine.state.players
+        .filter((player) => player.side === 'away')
+        .forEach((player) => {
+            player.x = 42;
+            player.y = player.y < 34 ? 4 : 64;
+        });
+    assert.equal(internals.passRoute(routeCarrier, routeForward), 'through_ball', 'through balls should require a runner with separation');
+
+    routeEngine.state.possession.lastSuccessfulPassRoute = 'cutback';
+    assert.equal(internals.shotRoute(routeMidfielder, 12), 'cutback', 'shot routes should use the previous successful pass context');
+
+    routeEngine.state.possession.lastSuccessfulPassRoute = null;
+    routeEngine.state.possession.lastRecoveryType = 'rebound';
+    assert.equal(internals.shotRoute(routeMidfielder, 10), 'rebound', 'rebound recoveries should classify second-phase shots');
+}
 
 const longGoalKickEngine = new RealTimeEngine(homeTeam, awayTeam, {
     tickSeconds: 0.25,
@@ -1172,20 +1333,27 @@ assert.ok(poorAngleEngine.events.some((event) => event.type === 'pass'), 'a poor
 assert.equal(poorAngleEngine.events.some((event) => event.type === 'shot'), false, 'a poor-angle attacker should not force a shot');
 
 const longShotRateSeeds = [20260504, 20260505, 20260506];
-const longShotRates = longShotRateSeeds.map((seed) => {
+const rateMatches = longShotRateSeeds.map((seed) => {
     const longShotRateEngine = new RealTimeEngine(homeTeam, awayTeam, {
         matchLengthSeconds: 90 * 60,
         random: seededRandom(seed),
     });
     longShotRateEngine.simulate(90 * 60);
 
-    const shots = longShotRateEngine.events.filter((event) => event.type === 'shot');
+    return longShotRateEngine.events;
+});
+const longShotRates = rateMatches.map((events) => {
+    const shots = events.filter((event) => event.type === 'shot');
     const longShots = shots.filter((event) => event.outcome === 'long_shot');
 
     return shots.length ? longShots.length / shots.length : 0;
 });
+const penaltyAwards = rateMatches.map((events) => {
+    return events.filter((event) => event.type === 'penalty' && event.outcome === 'penalty_foul').length;
+});
 
 assert.ok(longShotRates.every((rate) => rate <= 0.12), 'long shots should stay occasional across several seeds');
+assert.ok(penaltyAwards.every((awards) => awards <= 1), 'penalties should stay rare across several seeds');
 
 console.log({
     snapshots: snapshots.length,

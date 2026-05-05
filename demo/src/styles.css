@@ -229,7 +229,8 @@ main {
 .ball,
 .restart-zone,
 .pass-target,
-.second-ball-marker {
+.second-ball-marker,
+.intent-layer {
     position: absolute;
 }
 
@@ -319,6 +320,20 @@ main {
     transform: translate(-50%, -50%);
 }
 
+.intent-layer {
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.intent-layer line {
+    stroke: rgba(255, 255, 255, 0.74);
+    stroke-width: 0.45;
+    stroke-dasharray: 1.4 1;
+}
+
 .player {
     display: grid;
     place-items: center;
@@ -373,7 +388,7 @@ main {
 
 .match-report {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.8fr);
+    grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(12rem, 0.7fr));
     gap: 1.25rem;
     width: min(960px, 100%);
     margin: calc(var(--gutter-y) * -0.8) auto var(--gutter-y);
@@ -385,6 +400,7 @@ main {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.75rem;
+    grid-column: 1 / -1;
 }
 
 .match-report div {
@@ -423,6 +439,70 @@ main {
 
 .match-report td {
     text-align: right;
+}
+
+.shot-map {
+    position: relative;
+    overflow: hidden;
+    min-height: 10rem;
+    aspect-ratio: 105 / 68;
+    background:
+        linear-gradient(90deg, transparent 49.5%, rgba(255, 255, 255, 0.55) 49.5%, rgba(255, 255, 255, 0.55) 50.5%, transparent 50.5%),
+        #0d1168;
+}
+
+.match-report .shot-map {
+    padding: 0;
+}
+
+.shot-map span {
+    position: absolute;
+    width: 0.65rem;
+    height: 0.65rem;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: var(--away-color);
+    transform: translate(-50%, -50%);
+}
+
+.route-summary,
+.goal-context {
+    width: min(960px, 100%);
+    margin: 0 auto var(--gutter-y);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-small);
+}
+
+.route-summary {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+    padding: 0;
+    background: transparent;
+}
+
+.route-summary span,
+.goal-context div {
+    padding: 0.75rem;
+    background: var(--brand-alternate-color);
+    font-weight: 900;
+}
+
+.goal-context dl {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.goal-context dt,
+.goal-context dd {
+    margin: 0;
+}
+
+.goal-context dt {
+    color: var(--subtle-color);
+    text-transform: uppercase;
 }
 
 .inspector {

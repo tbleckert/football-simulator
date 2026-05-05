@@ -34,6 +34,7 @@
     }
 
     $: ballOwner = snapshot.players.find((player) => player.id === snapshot.ball.ownerId);
+    $: selectedPlayer = snapshot.players.find((player) => player.id === selectedPlayerId);
 </script>
 
 <div class="pitch-shell">
@@ -73,6 +74,16 @@
                 style:left={`${x(snapshot.secondBall.x)}%`}
                 style:top={`${y(snapshot.secondBall.y)}%`}
             ></div>
+        {/if}
+        {#if selectedPlayer}
+            <svg class="intent-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                <line
+                    x1={x(selectedPlayer.x)}
+                    y1={y(selectedPlayer.y)}
+                    x2={x(selectedPlayer.currentIntent.target.x)}
+                    y2={y(selectedPlayer.currentIntent.target.y)}
+                ></line>
+            </svg>
         {/if}
         {#each snapshot.players as player}
             <div

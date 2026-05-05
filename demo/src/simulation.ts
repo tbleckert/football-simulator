@@ -25,12 +25,27 @@ export interface RestartStats {
     executions: number;
 }
 
+export interface RouteCompletion {
+    attempted: number;
+    completed: number;
+}
+
 export interface MatchStats {
     averagePossessionPasses: number;
     longestPossession: number;
     looseBallShare: number;
     ballOwnedShare: number;
     restarts: Record<string, RestartStats>;
+    passRoutes: Record<string, number>;
+    shotRoutes: Record<string, number>;
+    averageChanceQuality: number;
+    finalThirdEntries: number;
+    wideEntries: number;
+    boxEntries: number;
+    crosses: RouteCompletion;
+    cutbacks: RouteCompletion;
+    throughBalls: RouteCompletion;
+    switches: RouteCompletion;
 }
 
 export interface SimulationReport {
@@ -389,6 +404,49 @@ function matchStats(events: RealTimeMatchEvent[], snapshots: MatchSnapshot[]): M
         looseBallShare: ratio(looseSnapshots.length, snapshots.length),
         ballOwnedShare: ratio(snapshots.length - looseSnapshots.length, snapshots.length),
         restarts: restartStats(events),
+        passRoutes: countBy(events.filter((event) => event.type === 'pass'), (event) => event.outcome || 'open play'),
+        shotRoutes: countBy(events.filter((event) => event.type === 'shot'), (event) => event.outcome || 'open play'),
+        averageChanceQuality: average(events
+            .filter((event) => event.type === 'shot')
+            .map((event) => event.chanceQuality || 0)
+            .filter((quality) => quality > 0)),
+        finalThirdEntries: possessionEntryTotal(events, 'finalThirdEntries'),
+        wideEntries: possessionEntryTotal(events, 'wideEntries'),
+        boxEntries: possessionEntryTotal(events, 'boxEntries'),
+        crosses: routeCompletion(events, 'cross'),
+        cutbacks: routeCompletion(events, 'cutback'),
+        throughBalls: routeCompletion(events, 'through_ball'),
+        switches: routeCompletion(events, 'switch_of_play'),
+    };
+}
+
+function countBy(events: RealTimeMatchEvent[], keyForEvent: (event: RealTimeMatchEvent) => string): Record<string, number> {
+    return events.reduce<Record<string, number>>((counts, event) => {
+        const key = keyForEvent(event);
+
+        counts[key] = (counts[key] || 0) + 1;
+
+        return counts;
+    }, {});
+}
+
+function possessionEntryTotal(
+    events: RealTimeMatchEvent[],
+    key: 'finalThirdEntries' | 'wideEntries' | 'boxEntries',
+): number {
+    const possessions = new Map<number, number>();
+
+    events.forEach((event) => {
+        possessions.set(event.possession.id, Math.max(possessions.get(event.possession.id) || 0, event.possession[key]));
+    });
+
+    return [...possessions.values()].reduce((total, value) => total + value, 0);
+}
+
+function routeCompletion(events: RealTimeMatchEvent[], route: string): RouteCompletion {
+    return {
+        attempted: events.filter((event) => event.type === 'pass' && event.outcome === route).length,
+        completed: events.filter((event) => event.type === 'receive' && event.possession.lastSuccessfulPassRoute === route).length,
     };
 }
 

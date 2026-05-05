@@ -1771,7 +1771,7 @@ export default class RealTimeEngine {
     private detectTackleOrFoul(owner: SimulatedPlayer): RealTimeMatchEvent[] {
         const defender = this.nearestOpponent(owner.side, owner);
         const penaltyAreaChallenge = defender ? this.isPenaltyFoul(defender.side, owner) : false;
-        const challengeRadius = penaltyAreaChallenge ? 1.2 : 1.4;
+        const challengeRadius = penaltyAreaChallenge ? 0.95 : 1.4;
 
         if (!defender || this.distance(owner, defender) > challengeRadius) {
             return [];
@@ -1796,7 +1796,7 @@ export default class RealTimeEngine {
             0.012,
         );
         const foulChance = penaltyAreaChallenge
-            ? baseFoulChance * 0.18
+            ? baseFoulChance * 0.03
             : baseFoulChance;
         defender.actionCooldown = 0.55;
 
@@ -2981,7 +2981,7 @@ export default class RealTimeEngine {
         }
 
         if (route === 'cross') {
-            return finalThird ? 10 : 5;
+            return finalThird ? 18 : 8;
         }
 
         if (route === 'through_ball') {
@@ -3114,6 +3114,10 @@ export default class RealTimeEngine {
         }
 
         if (ownerWide && targetZones.includes('box') && ownerProgress > 24) {
+            return 'cross';
+        }
+
+        if (ownerWide && targetCentral && forwardValue > 4 && ownerProgress > 20) {
             return 'cross';
         }
 

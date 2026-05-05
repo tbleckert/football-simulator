@@ -36,9 +36,32 @@ interface MatchAnalysis {
     passesEndingInRestartShare: number;
     restarts: Record<string, RestartStats>;
     shotRoutes: Record<string, number>;
+    shotRouteConversions: Record<string, { shots: number, goals: number, conversion: number }>;
     passRoutes: Record<string, number>;
+    passRoutesByZone: Record<string, Record<string, number>>;
+    shotTakersByPositionGroup: Record<string, number>;
+    averageChanceQuality: number;
+    chanceQualityByRoute: Record<string, number>;
+    finalThirdEntries: number;
+    wideEntries: number;
+    boxEntries: number;
+    crosses: RouteCompletion;
+    cutbacks: RouteCompletion;
+    throughBalls: RouteCompletion;
+    switches: RouteCompletion;
+    fouls: number;
+    penaltiesAwarded: number;
+    penaltiesScored: number;
+    yellowCards: number;
+    redCards: number;
+    goalsByRoute: Record<string, number>;
     topPassers: Record<string, number>;
     topShooters: Record<string, number>;
+}
+
+interface RouteCompletion {
+    attempted: number;
+    completed: number;
 }
 
 const defaultSeeds = [20260504, 20260505, 20260506, 20260507, 20260508];
@@ -148,6 +171,7 @@ function analyseMatch(seed: number): MatchAnalysis {
     const passes = events.filter((event) => event.type === 'pass');
     const receptions = events.filter((event) => event.type === 'receive');
     const shots = events.filter((event) => event.type === 'shot');
+    const goalsByRoute = countBy(events.filter((event) => event.type === 'goal'), goalRoute);
     const possessions = possessionsFromEvents(events);
     const looseSnapshots = snapshots.filter((snapshot) => !snapshot.ball.ownerId);
     const passRestartCount = countPassesEndingInRestarts(events);
@@ -169,7 +193,25 @@ function analyseMatch(seed: number): MatchAnalysis {
         passesEndingInRestartShare: ratio(passRestartCount, passes.length),
         restarts: restartStats(events),
         shotRoutes: countBy(shots, (event) => event.outcome || 'open_play'),
+        shotRouteConversions: shotRouteConversions(shots, goalsByRoute),
         passRoutes: countBy(passes, (event) => event.outcome || 'open_play'),
+        passRoutesByZone: passRoutesByZone(passes),
+        shotTakersByPositionGroup: countBy(shots, (event) => positionGroup(event.player?.position)),
+        averageChanceQuality: average(shots.map((event) => event.chanceQuality || 0).filter((quality) => quality > 0)),
+        chanceQualityByRoute: chanceQualityByRoute(shots),
+        finalThirdEntries: possessionEntryTotal(events, 'finalThirdEntries'),
+        wideEntries: possessionEntryTotal(events, 'wideEntries'),
+        boxEntries: possessionEntryTotal(events, 'boxEntries'),
+        crosses: routeCompletion(events, 'cross'),
+        cutbacks: routeCompletion(events, 'cutback'),
+        throughBalls: routeCompletion(events, 'through_ball'),
+        switches: routeCompletion(events, 'switch_of_play'),
+        fouls: events.filter((event) => event.type === 'foul').length,
+        penaltiesAwarded: events.filter((event) => event.type === 'penalty' && event.outcome === 'penalty_foul').length,
+        penaltiesScored: events.filter((event) => event.type === 'penalty' && event.outcome === 'goal').length,
+        yellowCards: events.filter((event) => event.type === 'yellow_card').length,
+        redCards: events.filter((event) => event.type === 'red_card').length,
+        goalsByRoute,
         topPassers: topCounts(passes),
         topShooters: topCounts(shots),
     };
@@ -264,6 +306,89 @@ function restartStats(events: RealTimeMatchEvent[]): Record<string, RestartStats
     });
 
     return stats;
+}
+
+function shotRouteConversions(
+    shots: RealTimeMatchEvent[],
+    goalsByRoute: Record<string, number>,
+): Record<string, { shots: number, goals: number, conversion: number }> {
+    const shotRoutes = countBy(shots, (event) => event.outcome || 'open_play');
+
+    return Object.fromEntries(Object.entries(shotRoutes).map(([route, shotCount]) => {
+        const goals = goalsByRoute[route] || 0;
+
+        return [route, {
+            shots: shotCount,
+            goals,
+            conversion: ratio(goals, shotCount),
+        }];
+    }));
+}
+
+function chanceQualityByRoute(shots: RealTimeMatchEvent[]): Record<string, number> {
+    const routes = [...new Set(shots.map((event) => event.outcome || 'open_play'))];
+
+    return Object.fromEntries(routes.map((route) => {
+        const routeShots = shots.filter((event) => (event.outcome || 'open_play') === route);
+
+        return [route, average(routeShots.map((event) => event.chanceQuality || 0).filter((quality) => quality > 0))];
+    }));
+}
+
+function passRoutesByZone(passes: RealTimeMatchEvent[]): Record<string, Record<string, number>> {
+    return passes.reduce<Record<string, Record<string, number>>>((zones, event) => {
+        const route = event.outcome || 'open_play';
+        const zone = event.fieldZones.find((fieldZone) => ['defensive_third', 'middle_third', 'attacking_third', 'final_third'].includes(fieldZone)) || 'unknown';
+
+        zones[zone] = zones[zone] || {};
+        zones[zone][route] = (zones[zone][route] || 0) + 1;
+
+        return zones;
+    }, {});
+}
+
+function possessionEntryTotal(
+    events: RealTimeMatchEvent[],
+    key: 'finalThirdEntries' | 'wideEntries' | 'boxEntries',
+): number {
+    const possessions = new Map<number, number>();
+
+    events.forEach((event) => {
+        possessions.set(event.possession.id, Math.max(possessions.get(event.possession.id) || 0, event.possession[key]));
+    });
+
+    return [...possessions.values()].reduce((total, value) => total + value, 0);
+}
+
+function routeCompletion(events: RealTimeMatchEvent[], route: string): RouteCompletion {
+    return {
+        attempted: events.filter((event) => event.type === 'pass' && event.outcome === route).length,
+        completed: events.filter((event) => event.type === 'receive' && event.possession.lastSuccessfulPassRoute === route).length,
+    };
+}
+
+function goalRoute(event: RealTimeMatchEvent): string {
+    return (event.outcome || 'open_play_goal').replace(/_goal$/, '');
+}
+
+function positionGroup(position: Position | undefined): string {
+    if (!position) {
+        return 'unknown';
+    }
+
+    if ([Position.LF, Position.CF, Position.RF, Position.ST, Position.LW, Position.RW].includes(position)) {
+        return 'attackers';
+    }
+
+    if ([Position.LCM, Position.CM, Position.RCM, Position.LM, Position.RM, Position.LDM, Position.DM, Position.RDM, Position.LCOM, Position.COM, Position.RCOM].includes(position)) {
+        return 'midfielders';
+    }
+
+    if ([Position.LB, Position.LCB, Position.CB, Position.RCB, Position.RB, Position.LWB, Position.RWB].includes(position)) {
+        return 'defenders';
+    }
+
+    return 'goalkeepers';
 }
 
 function countBy(events: RealTimeMatchEvent[], keyForEvent: (event: RealTimeMatchEvent) => string): Record<string, number> {
@@ -399,5 +524,22 @@ console.log(JSON.stringify({
         looseBallShare: average(matches.map((match) => match.looseBallShare)),
         ballOwnedShare: average(matches.map((match) => match.ballOwnedShare)),
         passesEndingInRestartShare: average(matches.map((match) => match.passesEndingInRestartShare)),
+        averageChanceQuality: average(matches.map((match) => match.averageChanceQuality)),
+        finalThirdEntries: average(matches.map((match) => match.finalThirdEntries)),
+        wideEntries: average(matches.map((match) => match.wideEntries)),
+        boxEntries: average(matches.map((match) => match.boxEntries)),
+        crossesAttempted: average(matches.map((match) => match.crosses.attempted)),
+        crossesCompleted: average(matches.map((match) => match.crosses.completed)),
+        cutbacksAttempted: average(matches.map((match) => match.cutbacks.attempted)),
+        cutbacksCompleted: average(matches.map((match) => match.cutbacks.completed)),
+        throughBallsAttempted: average(matches.map((match) => match.throughBalls.attempted)),
+        throughBallsCompleted: average(matches.map((match) => match.throughBalls.completed)),
+        switchesAttempted: average(matches.map((match) => match.switches.attempted)),
+        switchesCompleted: average(matches.map((match) => match.switches.completed)),
+        fouls: average(matches.map((match) => match.fouls)),
+        penaltiesAwarded: average(matches.map((match) => match.penaltiesAwarded)),
+        penaltiesScored: average(matches.map((match) => match.penaltiesScored)),
+        yellowCards: average(matches.map((match) => match.yellowCards)),
+        redCards: average(matches.map((match) => match.redCards)),
     },
 }, null, 2));
