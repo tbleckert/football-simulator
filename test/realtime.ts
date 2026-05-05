@@ -142,10 +142,12 @@ function velocityTowards(from: { x: number, y: number }, to: { x: number, y: num
 
 function engineInternals(engine: RealTimeEngine): {
     passRoute: (owner: RealTimeEngine['state']['players'][number], target: RealTimeEngine['state']['players'][number]) => string;
+    selectPassTarget: (owner: RealTimeEngine['state']['players'][number]) => RealTimeEngine['state']['players'][number] | null;
     shotRoute: (player: RealTimeEngine['state']['players'][number], distanceToGoal: number) => string;
 } {
     return engine as unknown as {
         passRoute: (owner: RealTimeEngine['state']['players'][number], target: RealTimeEngine['state']['players'][number]) => string;
+        selectPassTarget: (owner: RealTimeEngine['state']['players'][number]) => RealTimeEngine['state']['players'][number] | null;
         shotRoute: (player: RealTimeEngine['state']['players'][number], distanceToGoal: number) => string;
     };
 }
@@ -194,6 +196,45 @@ function possessionPassCounts(events: { type: string, teamSide?: string }[]): nu
     }
 
     return counts;
+}
+
+function prepareLongPassScenario(engine: RealTimeEngine): {
+    owner: RealTimeEngine['state']['players'][number];
+    farTarget: RealTimeEngine['state']['players'][number];
+} {
+    const owner = engine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+    const farTarget = engine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+
+    assert.ok(owner && farTarget, 'the long-pass scenario needs a midfielder and a forward');
+
+    if (!owner || !farTarget) {
+        throw new Error('Missing long-pass scenario players');
+    }
+
+    owner.x = 45;
+    owner.y = 34;
+    farTarget.x = 82;
+    farTarget.y = 34;
+
+    engine.state.players
+        .filter((player) => player.side === 'home' && player !== owner && player !== farTarget)
+        .forEach((player) => {
+            player.x = 44;
+            player.y = 34;
+            player.target = {
+                x: 44,
+                y: 34,
+            };
+        });
+
+    engine.state.players
+        .filter((player) => player.side === 'away')
+        .forEach((player, index) => {
+            player.x = 30;
+            player.y = index % 2 === 0 ? 4 : 64;
+        });
+
+    return { owner, farTarget };
 }
 
 const homeTeam = createTeam(true, 'Home', [
@@ -394,6 +435,112 @@ tacticsEngine.tick();
 
 assert.equal(tacticsEngine.state.tactics.home.mentality, 'attacking', 'losing teams should chase the match after the hour mark');
 assert.ok(tacticsEngine.state.tactics.home.tempo > 50, 'losing teams should play faster after the hour mark');
+
+const highLineEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    homeTactics: {
+        style: 'high_press',
+    },
+});
+const lowBlockLineEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    homeTactics: {
+        style: 'low_block',
+    },
+});
+const highLineCenterBack = highLineEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LCB);
+const lowBlockCenterBack = lowBlockLineEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LCB);
+const highLineFullback = highLineEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LB);
+const lowBlockFullback = lowBlockLineEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LB);
+
+assert.ok(highLineCenterBack && lowBlockCenterBack && highLineFullback && lowBlockFullback, 'the tactical-shape checks need defenders');
+
+if (highLineCenterBack && lowBlockCenterBack && highLineFullback && lowBlockFullback) {
+    assert.ok(highLineCenterBack.target.x > lowBlockCenterBack.target.x + 12, 'high-press defensive lines should start much higher than low blocks');
+    assert.ok(Math.abs(lowBlockFullback.target.y - 34) < Math.abs(highLineFullback.target.y - 34), 'low blocks should defend in a more compact shape');
+}
+
+const highPressIntentEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: seededRandom(151),
+    homeTactics: {
+        style: 'high_press',
+    },
+});
+highPressIntentEngine.start();
+
+const pressingForward = highPressIntentEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const pressedDefender = highPressIntentEngine.state.players.find((player) => player.side === 'away' && player.role === Position.LCB);
+
+assert.ok(pressingForward && pressedDefender, 'the high-press scenario needs a forward and defender');
+
+if (pressingForward && pressedDefender) {
+    pressingForward.x = 70;
+    pressingForward.y = 34;
+    pressedDefender.x = 82;
+    pressedDefender.y = 34;
+    pressedDefender.actionCooldown = 5;
+    highPressIntentEngine.state.ball.owner = pressedDefender;
+    highPressIntentEngine.state.ball.x = pressedDefender.x;
+    highPressIntentEngine.state.ball.y = pressedDefender.y;
+    const pressSlice = highPressIntentEngine.tick();
+    const forwardSnapshot = pressSlice.snapshot.players.find((player) => player.id === pressingForward.id);
+
+    assert.equal(forwardSnapshot?.currentIntent.type, 'press', 'high-press teams should jump on opponent build-up possessions');
+}
+
+const lowBlockIntentEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: seededRandom(152),
+    homeTactics: {
+        style: 'low_block',
+    },
+});
+lowBlockIntentEngine.start();
+
+const lowBlockForward = lowBlockIntentEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const lowBlockPressedDefender = lowBlockIntentEngine.state.players.find((player) => player.side === 'away' && player.role === Position.LCB);
+
+assert.ok(lowBlockForward && lowBlockPressedDefender, 'the low-block scenario needs a forward and defender');
+
+if (lowBlockForward && lowBlockPressedDefender) {
+    lowBlockForward.x = 70;
+    lowBlockForward.y = 34;
+    lowBlockPressedDefender.x = 82;
+    lowBlockPressedDefender.y = 34;
+    lowBlockPressedDefender.actionCooldown = 5;
+    lowBlockIntentEngine.state.ball.owner = lowBlockPressedDefender;
+    lowBlockIntentEngine.state.ball.x = lowBlockPressedDefender.x;
+    lowBlockIntentEngine.state.ball.y = lowBlockPressedDefender.y;
+    const lowBlockSlice = lowBlockIntentEngine.tick();
+    const forwardSnapshot = lowBlockSlice.snapshot.players.find((player) => player.id === lowBlockForward.id);
+
+    assert.notEqual(forwardSnapshot?.currentIntent.type, 'press', 'low blocks should hold shape instead of jumping from the same distance');
+}
+
+const directPassEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: seededRandom(153),
+    homeTactics: {
+        style: 'direct',
+    },
+});
+directPassEngine.start();
+const directScenario = prepareLongPassScenario(directPassEngine);
+const directTarget = engineInternals(directPassEngine).selectPassTarget(directScenario.owner);
+
+assert.equal(directTarget, directScenario.farTarget, 'direct teams should consider longer forward passes');
+
+const possessionPassEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: seededRandom(154),
+    homeTactics: {
+        style: 'possession',
+    },
+});
+possessionPassEngine.start();
+const possessionScenario = prepareLongPassScenario(possessionPassEngine);
+const possessionTarget = engineInternals(possessionPassEngine).selectPassTarget(possessionScenario.owner);
+
+assert.notEqual(possessionTarget, possessionScenario.farTarget, 'possession teams should prefer shorter circulation over the same long forward pass');
 
 const longShotEngine = new RealTimeEngine(homeTeam, awayTeam, {
     matchLengthSeconds: 10,

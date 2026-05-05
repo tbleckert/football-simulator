@@ -195,17 +195,25 @@ export function createSimulation(): Simulation {
         random: seededRandom(20260504),
         homeTactics: {
             formation: '4-4-2',
+            style: 'high_press',
             press: 62,
             width: 58,
             tempo: 66,
             mentality: 'attacking',
+            defensiveLine: 70,
+            compactness: 48,
+            focus: 'wide',
         },
         awayTactics: {
             formation: '4-3-3',
+            style: 'possession',
             press: 48,
             width: 52,
             tempo: 42,
             mentality: 'balanced',
+            defensiveLine: 56,
+            compactness: 58,
+            focus: 'central',
         },
     });
 

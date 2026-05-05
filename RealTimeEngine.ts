@@ -15,6 +15,8 @@ export interface Vector2 {
 
 export type TeamSide = 'home' | 'away';
 export type Mentality = 'defensive' | 'balanced' | 'attacking';
+export type TacticalStyle = 'balanced' | 'possession' | 'direct' | 'counter' | 'low_block' | 'high_press';
+export type AttackingFocus = 'balanced' | 'wide' | 'central';
 export type MatchPhase =
     'kickoff'
     | 'open_play'
@@ -115,10 +117,14 @@ export type RealTimeEventType =
 
 export interface Tactics {
     formation: string;
+    style: TacticalStyle;
     press: number;
     width: number;
     tempo: number;
     mentality: Mentality;
+    defensiveLine: number;
+    compactness: number;
+    focus: AttackingFocus;
 }
 
 export interface RefereeProfile {
@@ -363,10 +369,71 @@ export interface RealTimeEngineOptions {
 
 const defaultTactics: Tactics = {
     formation: '4-4-2',
+    style: 'balanced',
     press: 50,
     width: 55,
     tempo: 50,
     mentality: 'balanced',
+    defensiveLine: 50,
+    compactness: 50,
+    focus: 'balanced',
+};
+
+const tacticalStylePresets: Record<TacticalStyle, Omit<Tactics, 'formation' | 'style'>> = {
+    balanced: {
+        press: 50,
+        width: 55,
+        tempo: 50,
+        mentality: 'balanced',
+        defensiveLine: 50,
+        compactness: 50,
+        focus: 'balanced',
+    },
+    possession: {
+        press: 56,
+        width: 54,
+        tempo: 42,
+        mentality: 'balanced',
+        defensiveLine: 56,
+        compactness: 58,
+        focus: 'central',
+    },
+    direct: {
+        press: 46,
+        width: 52,
+        tempo: 72,
+        mentality: 'balanced',
+        defensiveLine: 48,
+        compactness: 46,
+        focus: 'balanced',
+    },
+    counter: {
+        press: 38,
+        width: 48,
+        tempo: 62,
+        mentality: 'defensive',
+        defensiveLine: 38,
+        compactness: 60,
+        focus: 'central',
+    },
+    low_block: {
+        press: 28,
+        width: 42,
+        tempo: 36,
+        mentality: 'defensive',
+        defensiveLine: 28,
+        compactness: 76,
+        focus: 'central',
+    },
+    high_press: {
+        press: 82,
+        width: 58,
+        tempo: 68,
+        mentality: 'attacking',
+        defensiveLine: 72,
+        compactness: 46,
+        focus: 'balanced',
+    },
 };
 
 const defaultReferee: RefereeProfile = {
@@ -596,12 +663,19 @@ export default class RealTimeEngine {
     }
 
     private tacticsFromOptions(options?: Partial<Tactics>): Tactics {
+        const style = options?.style || defaultTactics.style;
+        const preset = tacticalStylePresets[style];
+
         return {
             ...defaultTactics,
+            ...preset,
             ...options,
-            press: this.clamp(options?.press ?? defaultTactics.press, 0, 100),
-            width: this.clamp(options?.width ?? defaultTactics.width, 0, 100),
-            tempo: this.clamp(options?.tempo ?? defaultTactics.tempo, 0, 100),
+            style,
+            press: this.clamp(options?.press ?? preset.press, 0, 100),
+            width: this.clamp(options?.width ?? preset.width, 0, 100),
+            tempo: this.clamp(options?.tempo ?? preset.tempo, 0, 100),
+            defensiveLine: this.clamp(options?.defensiveLine ?? preset.defensiveLine, 0, 100),
+            compactness: this.clamp(options?.compactness ?? preset.compactness, 0, 100),
         };
     }
 
@@ -1309,15 +1383,18 @@ export default class RealTimeEngine {
             const hasBall = this.state.ball.owner?.side === side;
             const ball = this.state.ball;
             const direction = this.attackDirection(side);
-            const possessionShift = hasBall ? 6 : -4;
+            const possessionShift = hasBall ? 6 : -4 + (tactics.defensiveLine - 50) * 0.05;
             const ballShift = (ball.x - pitch.length / 2) * 0.12 * direction;
+            const compactness = hasBall ? 0 : Math.max(0, (tactics.compactness - 50) / 100);
 
             players.forEach((player, index) => {
                 const slot = baseTargets[index];
                 const towardBall = this.distance(player, ball) < 24 ? 0.18 : 0.08;
                 const target = {
                     x: slot.x + direction * (possessionShift + ballShift),
-                    y: slot.y + (ball.y - slot.y) * towardBall,
+                    y: slot.y
+                        + (ball.y - slot.y) * towardBall
+                        + (pitch.width / 2 - slot.y) * compactness * 0.5,
                 };
 
                 player.target = this.clampPoint(target);
@@ -1412,9 +1489,11 @@ export default class RealTimeEngine {
         }
 
         const passTarget = this.selectPassTarget(player);
-        const tempo = this.tactics(player.side).tempo / 100;
+        const tactics = this.tactics(player.side);
+        const tempo = tactics.tempo / 100;
+        const passChance = 0.12 + tempo * 0.22 + this.stylePassFrequencyBonus(tactics.style);
 
-        if (player.actionCooldown === 0 && passTarget && this.random() < 0.12 + tempo * 0.22) {
+        if (player.actionCooldown === 0 && passTarget && this.random() < passChance) {
             return this.intent('pass', {
                     x: passTarget.x,
                     y: passTarget.y,
@@ -1556,8 +1635,7 @@ export default class RealTimeEngine {
     }
 
     private intentForOutOfPossession(player: SimulatedPlayer, ballOwner: SimulatedPlayer): PlayerIntent {
-        const tactics = this.tactics(player.side);
-        const pressDistance = 8 + tactics.press * 0.18;
+        const pressDistance = this.pressDistance(player, ballOwner);
 
         if (this.distance(player, ballOwner) < pressDistance) {
             return this.intent('press', {
@@ -1565,8 +1643,8 @@ export default class RealTimeEngine {
                     y: ballOwner.y,
                 }, {
                     duration: 1.5,
-                    urgency: 0.82,
-                    tacticalRisk: 0.4,
+                    urgency: this.pressUrgency(player.side),
+                    tacticalRisk: this.pressRisk(player.side),
                 });
         }
 
@@ -1591,6 +1669,69 @@ export default class RealTimeEngine {
             urgency: 0.35,
             tacticalRisk: 0.1,
         });
+    }
+
+    private pressDistance(player: SimulatedPlayer, ballOwner: SimulatedPlayer): number {
+        const tactics = this.tactics(player.side);
+        const defendingZones = this.fieldZonesFor(player.side, ballOwner);
+        const roleBonus = attackPositions.includes(player.role)
+            ? 3
+            : midfieldPositions.includes(player.role)
+                ? 1.5
+                : 0;
+        const trapBonus = this.pressTrapBonus(tactics, defendingZones);
+
+        return 7
+            + tactics.press * 0.16
+            + tactics.defensiveLine * 0.05
+            - tactics.compactness * 0.02
+            + this.stylePressDistanceModifier(tactics.style)
+            + roleBonus
+            + trapBonus;
+    }
+
+    private stylePressDistanceModifier(style: TacticalStyle): number {
+        switch (style) {
+            case 'high_press':
+                return 3;
+            case 'low_block':
+                return -6;
+            case 'counter':
+                return -2;
+            default:
+                return 0;
+        }
+    }
+
+    private pressTrapBonus(tactics: Tactics, zones: FieldZone[]): number {
+        let bonus = 0;
+
+        if (tactics.style === 'high_press' && zones.includes('attacking_third')) {
+            bonus += 5;
+        }
+
+        if (tactics.focus === 'wide' && this.hasWideZone(zones)) {
+            bonus += 3;
+        }
+
+        if (tactics.focus === 'central' && tactics.press >= 45 && zones.includes('central_lane')) {
+            bonus += 2;
+        }
+
+        return bonus;
+    }
+
+    private pressUrgency(side: TeamSide): number {
+        const tactics = this.tactics(side);
+
+        return this.clamp(0.64 + tactics.press / 100 * 0.28 + tactics.defensiveLine / 100 * 0.08, 0.58, 0.98);
+    }
+
+    private pressRisk(side: TeamSide): number {
+        const tactics = this.tactics(side);
+        const compactnessCover = tactics.compactness / 100 * 0.12;
+
+        return this.clamp(0.22 + tactics.press / 100 * 0.26 + tactics.defensiveLine / 100 * 0.18 - compactnessCover, 0.18, 0.78);
     }
 
     private resolveBallAction(): RealTimeMatchEvent[] {
@@ -1630,7 +1771,7 @@ export default class RealTimeEngine {
         const inaccurate = this.random() > quality;
         const route = this.passRoute(owner, targetPlayer);
         const speed = this.passSpeed(route, passDistance);
-        const targetKind = this.passTargetKind(route, passDistance);
+        const targetKind = this.passTargetKind(route, passDistance, this.tactics(owner.side));
         const intendedTarget = this.passTargetPoint(owner, targetPlayer, route, speed);
         const miss = inaccurate ? this.randomPoint(2.5, this.passMissDistance(passDistance, route)) : { x: 0, y: 0 };
         const rawTarget = {
@@ -2892,14 +3033,16 @@ export default class RealTimeEngine {
             },
         ];
         const mentalityShift = this.mentalityShift(tactics.mentality);
-        const lineStart = 22 + mentalityShift;
-        const lineEnd = 82 + mentalityShift;
+        const defensiveLineShift = (tactics.defensiveLine - 50) * 0.16;
+        const compactnessWidth = (tactics.compactness - 50) * 0.16;
+        const lineStart = 22 + mentalityShift + defensiveLineShift;
+        const lineEnd = 82 + mentalityShift + defensiveLineShift;
 
         shape.forEach((playerCount, lineIndex) => {
             const x = shape.length === 1
                 ? (lineStart + lineEnd) / 2
                 : lineStart + (lineEnd - lineStart) * (lineIndex / (shape.length - 1));
-            const lineWidth = 26 + tactics.width / 100 * 34;
+            const lineWidth = this.clamp(26 + tactics.width / 100 * 34 - compactnessWidth, 24, 62);
             const minY = pitch.width / 2 - lineWidth / 2;
             const gap = playerCount === 1 ? 0 : lineWidth / (playerCount - 1);
 
@@ -2938,7 +3081,10 @@ export default class RealTimeEngine {
         const direction = this.attackDirection(owner.side);
         const opponents = this.playersAgainst(owner.side);
         const pressure = this.pressureAround(owner);
-        const tempo = this.tactics(owner.side).tempo / 100;
+        const tactics = this.tactics(owner.side);
+        const tempo = tactics.tempo / 100;
+        const directness = this.tacticalDirectness(tactics);
+        const maxDistance = this.maxOpenPlayPassDistance(tactics);
         const progress = (owner.x - pitch.length / 2) * direction;
         const candidates = this.playersForSide(owner.side)
             .filter((player) => player !== owner)
@@ -2951,20 +3097,22 @@ export default class RealTimeEngine {
                 const resetOption = forwardValue < -2 && distance < 26;
                 const route = this.passRoute(owner, player);
                 const ambitiousPenalty = Math.max(0, forwardValue - 18) * (pressure > 0.25 || progress < 18 ? 0.65 : 0.18);
-                const forwardWeight = pressure > 0.45 ? -0.12 : 0.08 + tempo * 0.12;
+                const forwardWeight = pressure > 0.45 ? -0.12 : 0.08 + tempo * 0.12 + directness * 0.1;
+                const distanceWeight = tactics.style === 'possession' ? 0.3 : 0.2 - directness * 0.04;
                 const score = forwardValue * forwardWeight
                     + opponentDistance * 0.48
-                    - distance * 0.2
+                    - distance * distanceWeight
                     - supportLane * 0.04
                     - ambitiousPenalty
                     + this.passRouteSelectionBonus(route, owner, player)
+                    + this.styleRouteSelectionBonus(tactics, route, forwardValue, distance)
                     + (safeSupport ? 7 : 0)
                     + (resetOption && pressure > 0.22 ? 6 : 0)
                     + this.random() * 4;
 
                 return { player, distance, score, route };
             })
-            .filter((candidate) => candidate.distance > 5 && candidate.distance < 34)
+            .filter((candidate) => candidate.distance > 5 && candidate.distance < maxDistance)
             .sort((a, b) => b.score - a.score);
 
         return candidates[0]?.player || null;
@@ -3007,6 +3155,96 @@ export default class RealTimeEngine {
         return 0;
     }
 
+    private tacticalDirectness(tactics: Tactics): number {
+        switch (tactics.style) {
+            case 'direct':
+                return 0.9;
+            case 'counter':
+                return 0.7;
+            case 'high_press':
+                return 0.35;
+            case 'possession':
+                return -0.35;
+            case 'low_block':
+                return -0.2;
+            default:
+                return 0;
+        }
+    }
+
+    private maxOpenPlayPassDistance(tactics: Tactics): number {
+        switch (tactics.style) {
+            case 'direct':
+                return 44;
+            case 'counter':
+                return 40;
+            case 'high_press':
+                return 38;
+            case 'possession':
+                return 30;
+            default:
+                return 34;
+        }
+    }
+
+    private styleRouteSelectionBonus(
+        tactics: Tactics,
+        route: string,
+        forwardValue: number,
+        distance: number,
+    ): number {
+        let bonus = 0;
+
+        if (tactics.style === 'possession') {
+            if (['lateral_support', 'backward_reset', 'wall_pass', 'line_breaking_pass'].includes(route)) {
+                bonus += 8;
+            }
+
+            if (distance < 18) {
+                bonus += 4;
+            }
+
+            if (forwardValue > 18) {
+                bonus -= 8;
+            }
+        }
+
+        if (tactics.style === 'direct') {
+            if (['progressive_pass', 'through_ball', 'cross'].includes(route)) {
+                bonus += 10;
+            }
+
+            if (distance > 24) {
+                bonus += 6;
+            }
+        }
+
+        if (tactics.style === 'counter' && forwardValue > 10) {
+            bonus += ['through_ball', 'progressive_pass', 'line_breaking_pass'].includes(route) ? 11 : 5;
+        }
+
+        if (tactics.style === 'low_block') {
+            bonus += forwardValue > 12 ? 4 : 0;
+            bonus += ['lateral_support', 'backward_reset'].includes(route) ? 5 : 0;
+        }
+
+        if (tactics.style === 'high_press' && forwardValue > 4) {
+            bonus += ['through_ball', 'progressive_pass', 'cross'].includes(route) ? 7 : 3;
+        }
+
+        if (tactics.focus === 'wide') {
+            bonus += ['cross', 'switch_of_play', 'overlap_pass'].includes(route) ? 8 : 0;
+            bonus -= ['line_breaking_pass', 'wall_pass'].includes(route) ? 2 : 0;
+        }
+
+        if (tactics.focus === 'central') {
+            bonus += ['line_breaking_pass', 'wall_pass', 'through_ball', 'cutback', 'underlap_pass'].includes(route) ? 8 : 0;
+            bonus -= route === 'cross' ? 5 : 0;
+        }
+
+        return bonus;
+    }
+
     private passTargetPoint(
         owner: SimulatedPlayer,
         target: SimulatedPlayer,
@@ -3024,7 +3262,11 @@ export default class RealTimeEngine {
         return this.clampPassTarget(point);
     }
 
-    private passTargetKind(route: string, distance: number): 'feet' | 'space' | 'contest' {
+    private passTargetKind(route: string, distance: number, tactics: Tactics): 'feet' | 'space' | 'contest' {
+        if (['direct', 'counter'].includes(tactics.style) && distance > 26) {
+            return 'contest';
+        }
+
         if (route === 'through_ball' || route === 'cutback' || route === 'overlap_pass' || route === 'underlap_pass') {
             return 'space';
         }
@@ -3069,6 +3311,9 @@ export default class RealTimeEngine {
         const targetPressure = this.pressureAround(target);
         const routeRisk = targetKind === 'contest' ? 0.26 : targetKind === 'space' ? 0.14 : 0.04;
         const bodyAngleCost = Math.abs(target.y - owner.y) / pitch.width * 0.16;
+        const tactics = this.tactics(owner.side);
+        const directRisk = ['direct', 'counter'].includes(tactics.style) && (distance > 28 || targetKind === 'contest') ? 0.08 : 0;
+        const possessionHelp = tactics.style === 'possession' && distance < 20 && targetKind === 'feet' ? 0.04 : 0;
 
         return this.clamp(
             distance / 70
@@ -3076,7 +3321,9 @@ export default class RealTimeEngine {
             + targetPressure * 0.24
             + routeRisk
             + bodyAngleCost
-            - owner.attributes.passing / 20 * 0.08,
+            + directRisk
+            - owner.attributes.passing / 20 * 0.08
+            - possessionHelp,
             0.08,
             0.88,
         );
@@ -3485,13 +3732,47 @@ export default class RealTimeEngine {
         );
     }
 
+    private stylePassFrequencyBonus(style: TacticalStyle): number {
+        switch (style) {
+            case 'possession':
+                return 0.12;
+            case 'direct':
+                return -0.02;
+            case 'counter':
+                return -0.01;
+            case 'low_block':
+                return -0.02;
+            case 'high_press':
+                return 0.03;
+            default:
+                return 0;
+        }
+    }
+
     private passQuality(player: SimulatedPlayer, passDistance: number, pressure: number): number {
         const passing = player.attributes.passing / 20;
         const technique = player.attributes.technique / 20;
         const decisions = player.attributes.decisions / 20;
         const distancePenalty = passDistance / 155;
+        const tactics = this.tactics(player.side);
+        const styleModifier = tactics.style === 'possession' && passDistance < 22
+            ? 0.05
+            : ['direct', 'counter'].includes(tactics.style) && passDistance > 24
+                ? -0.08
+                : 0;
 
-        return this.clamp(0.66 + passing * 0.16 + technique * 0.11 + decisions * 0.1 - pressure * 0.12 - distancePenalty - player.injuryPerformancePenalty * 0.16, 0.46, 0.96);
+        return this.clamp(
+            0.66
+            + passing * 0.16
+            + technique * 0.11
+            + decisions * 0.1
+            + styleModifier
+            - pressure * 0.12
+            - distancePenalty
+            - player.injuryPerformancePenalty * 0.16,
+            0.46,
+            0.96,
+        );
     }
 
     private shotQuality(player: SimulatedPlayer, distanceToGoal: number, route: string): number {
@@ -3509,6 +3790,7 @@ export default class RealTimeEngine {
             ? this.clamp(this.distance(goalkeeper, goal) / 18, 0, 1) * 0.04
             : 0.02;
         const routeBoost = this.shotRouteQualityBoost(route);
+        const defensiveModifier = this.defensiveShotQualityModifier(player.side, player, route);
 
         return this.clamp(
             0.32
@@ -3517,6 +3799,7 @@ export default class RealTimeEngine {
             + technique * 0.14
             + composure * 0.13
             + routeBoost
+            + defensiveModifier
             + goalkeeperPosition
             - pressure * 0.18
             - distancePenalty
@@ -3552,6 +3835,39 @@ export default class RealTimeEngine {
         }
     }
 
+    private defensiveShotQualityModifier(attackingSide: TeamSide, point: Vector2, route: string): number {
+        const defendingTactics = this.tactics(this.oppositeSide(attackingSide));
+        const zones = this.fieldZonesFor(attackingSide, point);
+        let modifier = 0;
+
+        if (zones.includes('final_third')) {
+            modifier -= Math.max(0, defendingTactics.compactness - 50) / 100 * 0.06;
+        }
+
+        if (zones.includes('box')) {
+            modifier -= Math.max(0, defendingTactics.compactness - 50) / 100 * 0.08;
+            modifier -= Math.max(0, 50 - defendingTactics.defensiveLine) / 100 * 0.05;
+        }
+
+        if (defendingTactics.style === 'low_block' && zones.includes('final_third')) {
+            modifier -= 0.05;
+        }
+
+        if (defendingTactics.defensiveLine > 65 && route === 'through_ball') {
+            modifier += 0.08;
+        }
+
+        if (defendingTactics.compactness > 65 && ['cutback', 'central_combination', 'late_midfield_run'].includes(route)) {
+            modifier -= 0.04;
+        }
+
+        if (defendingTactics.focus === 'wide' && route === 'cross') {
+            modifier -= 0.04;
+        }
+
+        return modifier;
+    }
+
     private pressureAround(player: SimulatedPlayer): number {
         const nearest = this.nearestOpponent(player.side, player);
 
@@ -3559,7 +3875,35 @@ export default class RealTimeEngine {
             return 0;
         }
 
-        return this.clamp(1 - this.distance(player, nearest) / 9, 0, 1);
+        return this.clamp(1 - this.distance(player, nearest) / 9 + this.defensiveSystemPressure(player), 0, 1);
+    }
+
+    private defensiveSystemPressure(player: SimulatedPlayer): number {
+        const defendingTactics = this.tactics(this.oppositeSide(player.side));
+        const zones = this.fieldZonesFor(player.side, player);
+        let pressure = 0;
+
+        if (zones.includes('final_third')) {
+            pressure += Math.max(0, defendingTactics.compactness - 50) / 100 * 0.1;
+        }
+
+        if (zones.includes('box')) {
+            pressure += Math.max(0, 50 - defendingTactics.defensiveLine) / 100 * 0.08;
+        }
+
+        if (defendingTactics.style === 'low_block' && zones.includes('final_third')) {
+            pressure += 0.06;
+        }
+
+        if (defendingTactics.focus === 'wide' && this.hasWideZone(zones)) {
+            pressure += 0.04;
+        }
+
+        if (defendingTactics.focus === 'central' && zones.includes('central_lane')) {
+            pressure += 0.04;
+        }
+
+        return pressure;
     }
 
     private interceptionChance(player: SimulatedPlayer, action: ActiveBallAction): number {
@@ -3583,7 +3927,12 @@ export default class RealTimeEngine {
 
     private updateStamina(player: SimulatedPlayer): void {
         const intenseIntents: PlayerIntentType[] = ['press', 'recover', 'attack_second_ball', 'receive_pass', 'dribble', 'overlap', 'attack_box', 'make_forward_run', 'track_runner'];
-        const extraDrain = intenseIntents.includes(player.currentIntent.type) ? 0.01 : 0.004;
+        const tactics = this.tactics(player.side);
+        const intenseDrain = intenseIntents.includes(player.currentIntent.type) ? 0.01 : 0.004;
+        const pressDrain = player.currentIntent.type === 'press' ? tactics.press / 100 * 0.008 : 0;
+        const tempoDrain = intenseIntents.includes(player.currentIntent.type) ? tactics.tempo / 100 * 0.003 : 0;
+        const styleDrain = tactics.style === 'high_press' && player.currentIntent.type === 'press' ? 0.004 : 0;
+        const extraDrain = intenseDrain + pressDrain + tempoDrain + styleDrain;
 
         player.stamina = this.clamp(player.stamina - (0.005 + extraDrain) * this.tickSeconds, 35, 100);
     }

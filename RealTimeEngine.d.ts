@@ -8,6 +8,8 @@ export interface Vector2 {
 }
 export type TeamSide = 'home' | 'away';
 export type Mentality = 'defensive' | 'balanced' | 'attacking';
+export type TacticalStyle = 'balanced' | 'possession' | 'direct' | 'counter' | 'low_block' | 'high_press';
+export type AttackingFocus = 'balanced' | 'wide' | 'central';
 export type MatchPhase = 'kickoff' | 'open_play' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'injury_stoppage' | 'substitution' | 'half_time' | 'full_time';
 export type FieldZone = 'defensive_third' | 'middle_third' | 'attacking_third' | 'final_third' | 'wide_left' | 'wide_right' | 'half_space_left' | 'half_space_right' | 'central_lane' | 'box' | 'byline';
 export type AttackPattern = 'none' | 'patient_buildup' | 'midfield_progression' | 'final_third_probe' | 'wide_overload' | 'switch_of_play' | 'overlap' | 'underlap' | 'through_ball' | 'cross' | 'cutback' | 'late_run' | 'rebound' | 'second_ball' | 'set_piece' | 'central_combination' | 'defensive_transition';
@@ -16,10 +18,14 @@ export type PlayerIntentType = 'hold_shape' | 'press' | 'cover_passing_lane' | '
 export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'dribble' | 'challenge' | 'yellow_card' | 'red_card' | 'injury' | 'substitution' | 'advantage' | 'aerial_duel' | 'blocked_shot' | 'goalkeeper_claim' | 'goalkeeper_punch' | 'pass' | 'receive' | 'second_ball' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
 export interface Tactics {
     formation: string;
+    style: TacticalStyle;
     press: number;
     width: number;
     tempo: number;
     mentality: Mentality;
+    defensiveLine: number;
+    compactness: number;
+    focus: AttackingFocus;
 }
 export interface RefereeProfile {
     strictness: number;
@@ -299,6 +305,11 @@ export default class RealTimeEngine {
     private intentForSecondBall;
     private intentForTeammateInPossession;
     private intentForOutOfPossession;
+    private pressDistance;
+    private stylePressDistanceModifier;
+    private pressTrapBonus;
+    private pressUrgency;
+    private pressRisk;
     private resolveBallAction;
     private startPass;
     private startShot;
@@ -345,6 +356,9 @@ export default class RealTimeEngine {
     private parseFormation;
     private selectPassTarget;
     private passRouteSelectionBonus;
+    private tacticalDirectness;
+    private maxOpenPlayPassDistance;
+    private styleRouteSelectionBonus;
     private passTargetPoint;
     private passTargetKind;
     private passSpeed;
@@ -376,10 +390,13 @@ export default class RealTimeEngine {
     private isWideCarrier;
     private hasOverlappingSupport;
     private shootingIntentChance;
+    private stylePassFrequencyBonus;
     private passQuality;
     private shotQuality;
     private shotRouteQualityBoost;
+    private defensiveShotQualityModifier;
     private pressureAround;
+    private defensiveSystemPressure;
     private interceptionChance;
     private playerSpeed;
     private updateStamina;

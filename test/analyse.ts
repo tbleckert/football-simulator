@@ -2,6 +2,7 @@ import Player, { type PlayerAttributes } from '../Player';
 import RealTimeEngine, {
     type MatchSnapshot,
     type RealTimeMatchEvent,
+    type Tactics,
     type TeamSide,
 } from '../RealTimeEngine';
 import Team from '../Team';
@@ -62,6 +63,17 @@ interface MatchAnalysis {
 interface RouteCompletion {
     attempted: number;
     completed: number;
+}
+
+interface TacticalProfile {
+    style: string;
+    finalThirdRecoveries: number;
+    passCompletion: number;
+    averagePossessionPasses: number;
+    secondBalls: number;
+    shotsFor: number;
+    shotsConceded: number;
+    averageStamina: number;
 }
 
 const defaultSeeds = [20260504, 20260505, 20260506, 20260507, 20260508];
@@ -214,6 +226,52 @@ function analyseMatch(seed: number): MatchAnalysis {
         goalsByRoute,
         topPassers: topCounts(passes),
         topShooters: topCounts(shots),
+    };
+}
+
+function analyseTacticalProfile(style: string, tactics: Partial<Tactics>, seeds: number[]): TacticalProfile {
+    const profiles = seeds.map((seed) => {
+        const homeTeam = createTeam(true, 'Home', homePositions);
+        const awayTeam = createTeam(false, 'Away', awayPositions);
+        const engine = new RealTimeEngine(homeTeam, awayTeam, {
+            random: seededRandom(seed),
+            homeTactics: tactics,
+            awayTactics: {
+                style: 'balanced',
+            },
+        });
+        const snapshots = engine.simulate(90 * 60);
+        const finalSnapshot = snapshots[snapshots.length - 1] as MatchSnapshot;
+        const events = engine.events;
+        const homePasses = events.filter((event) => event.teamSide === 'home' && event.type === 'pass');
+        const homeReceives = events.filter((event) => event.teamSide === 'home' && event.type === 'receive');
+        const homePossessions = possessionsFromEvents(events).filter((possession) => possession.side === 'home');
+        const homePlayers = finalSnapshot.players.filter((player) => player.teamSide === 'home');
+
+        return {
+            finalThirdRecoveries: events.filter((event) => {
+                return event.teamSide === 'home'
+                    && ['interception', 'tackle', 'recovery'].includes(event.type)
+                    && event.fieldZones.includes('final_third');
+            }).length,
+            passCompletion: ratio(homeReceives.length, homePasses.length),
+            averagePossessionPasses: average(homePossessions.map((possession) => possession.passes)),
+            secondBalls: events.filter((event) => event.teamSide === 'home' && ['second_ball', 'aerial_duel'].includes(event.type)).length,
+            shotsFor: events.filter((event) => event.teamSide === 'home' && event.type === 'shot').length,
+            shotsConceded: events.filter((event) => event.teamSide === 'away' && event.type === 'shot').length,
+            averageStamina: average(homePlayers.map((player) => player.stamina)),
+        };
+    });
+
+    return {
+        style,
+        finalThirdRecoveries: average(profiles.map((profile) => profile.finalThirdRecoveries)),
+        passCompletion: average(profiles.map((profile) => profile.passCompletion)),
+        averagePossessionPasses: average(profiles.map((profile) => profile.averagePossessionPasses)),
+        secondBalls: average(profiles.map((profile) => profile.secondBalls)),
+        shotsFor: average(profiles.map((profile) => profile.shotsFor)),
+        shotsConceded: average(profiles.map((profile) => profile.shotsConceded)),
+        averageStamina: average(profiles.map((profile) => profile.averageStamina)),
     };
 }
 
@@ -510,9 +568,17 @@ function seedsFromArgs(): number[] {
 }
 
 const matches = seedsFromArgs().map((seed) => analyseMatch(seed));
+const tacticalProfileSeeds = seedsFromArgs();
+const tacticalProfiles = [
+    analyseTacticalProfile('high_press', { style: 'high_press' }, tacticalProfileSeeds),
+    analyseTacticalProfile('low_block', { style: 'low_block' }, tacticalProfileSeeds),
+    analyseTacticalProfile('possession', { style: 'possession' }, tacticalProfileSeeds),
+    analyseTacticalProfile('direct', { style: 'direct' }, tacticalProfileSeeds),
+];
 
 console.log(JSON.stringify({
     matches,
+    tacticalProfiles,
     averages: {
         passes: average(matches.map((match) => match.passes)),
         passCompletion: average(matches.map((match) => match.passCompletion)),
