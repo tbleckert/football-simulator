@@ -174,10 +174,12 @@ export default class RealTimeReporter {
 
     private managerImpactSection(): RealTimeReportSection {
         const substitutions = this.engine.events.filter((event) => event.type === 'substitution');
+        const tacticalChanges = this.engine.events.filter((event) => event.type === 'tactical_change');
+        const roleChanges = this.engine.events.filter((event) => event.type === 'role_change');
         const redCards = this.engine.events.filter((event) => event.type === 'red_card');
         const injuries = this.engine.events.filter((event) => event.type === 'injury');
 
-        if (!substitutions.length && !redCards.length && !injuries.length) {
+        if (!substitutions.length && !tacticalChanges.length && !roleChanges.length && !redCards.length && !injuries.length) {
             return {
                 title: 'Manager impact',
                 text: 'The match stayed mostly in the starting tactical plans, with no substitution, injury, or red-card reshaping.',
@@ -185,6 +187,8 @@ export default class RealTimeReporter {
         }
 
         const notes = [
+            tacticalChanges.length ? `${tacticalChanges.length} tactical change${tacticalChanges.length === 1 ? '' : 's'}` : '',
+            roleChanges.length ? `${roleChanges.length} role change${roleChanges.length === 1 ? '' : 's'}` : '',
             substitutions.length ? `${substitutions.length} substitution${substitutions.length === 1 ? '' : 's'}` : '',
             injuries.length ? `${injuries.length} injury event${injuries.length === 1 ? '' : 's'}` : '',
             redCards.length ? `${redCards.length} red card${redCards.length === 1 ? '' : 's'}` : '',
@@ -198,7 +202,7 @@ export default class RealTimeReporter {
 
     private turningPoints(): RealTimeReportSection[] {
         const events = this.engine.events.filter((event) => {
-            return ['goal', 'penalty', 'red_card', 'substitution', 'injury'].includes(event.type);
+            return ['goal', 'penalty', 'red_card', 'substitution', 'tactical_change', 'role_change', 'injury'].includes(event.type);
         });
 
         return events.slice(0, 6).map((event) => ({
@@ -219,6 +223,14 @@ export default class RealTimeReporter {
 
         if (event.type === 'substitution') {
             return `${player} came on because of ${this.label(event.outcome || 'manager_choice')}.`;
+        }
+
+        if (event.type === 'tactical_change') {
+            return `${event.teamSide || 'A team'} changed the tactical plan for ${this.label(event.outcome || 'manager_tactical_change')}.`;
+        }
+
+        if (event.type === 'role_change') {
+            return `${player} changed role for ${this.label(event.outcome || 'manager_role_change')}.`;
         }
 
         if (event.type === 'penalty') {

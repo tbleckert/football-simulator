@@ -552,6 +552,40 @@ const possessionTarget = engineInternals(possessionPassEngine).selectPassTarget(
 
 assert.notEqual(possessionTarget, possessionScenario.farTarget, 'possession teams should prefer shorter circulation over the same long forward pass');
 
+const managerActionEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 90 * 60,
+    random: seededRandom(155),
+    homeTactics: {
+        style: 'high_press',
+    },
+});
+managerActionEngine.start();
+
+const managerCenterBack = managerActionEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LCB);
+const roleChangePlayer = managerActionEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RM);
+
+assert.ok(managerCenterBack && roleChangePlayer, 'manager action checks need a defender and wide midfielder');
+
+if (managerCenterBack && roleChangePlayer) {
+    const previousTargetX = managerCenterBack.target.x;
+    const tacticalChange = managerActionEngine.applyTacticalChange('home', {
+        formation: '4-3-3',
+        style: 'low_block',
+        mentality: 'defensive',
+        press: 24,
+    }, 'protect_lead');
+    const roleChange = managerActionEngine.applyRoleChange(roleChangePlayer.id, Position.RB, 'protect_right_side');
+    const managerReport = new RealTimeReporter(managerActionEngine).getReport();
+
+    assert.equal(tacticalChange.type, 'tactical_change', 'manager tactical changes should emit an explanatory event');
+    assert.equal(managerActionEngine.state.tactics.home.formation, '4-3-3', 'manager tactical changes should update formation');
+    assert.equal(managerActionEngine.state.tactics.home.style, 'low_block', 'manager tactical changes should update team style');
+    assert.ok(managerCenterBack.target.x < previousTargetX, 'manager tactical changes should immediately alter team shape');
+    assert.equal(roleChange?.type, 'role_change', 'manager role changes should emit an explanatory event');
+    assert.equal(roleChangePlayer.role, Position.RB, 'manager role changes should update the player role');
+    assert.ok(managerReport.sections.some((section) => section.title === 'Manager impact' && section.text.includes('tactical change')), 'reports should explain manager tactical changes');
+}
+
 const longShotEngine = new RealTimeEngine(homeTeam, awayTeam, {
     matchLengthSeconds: 10,
     random: queuedRandom([0.99, 0, 0.5, 0.5]),

@@ -98,6 +98,8 @@ export type RealTimeEventType =
     | 'red_card'
     | 'injury'
     | 'substitution'
+    | 'tactical_change'
+    | 'role_change'
     | 'advantage'
     | 'aerial_duel'
     | 'blocked_shot'
@@ -566,6 +568,47 @@ export default class RealTimeEngine {
         }
 
         return this.snapshots;
+    }
+
+    applyTacticalChange(
+        side: TeamSide,
+        changes: Partial<Tactics>,
+        reason: string = 'manager_tactical_change',
+    ): RealTimeMatchEvent {
+        const updatedTactics = this.tacticsFromOptions({
+            ...this.baseTactics[side],
+            ...changes,
+        });
+        const player = this.closestPlayerTo(side, this.state.ball) || undefined;
+
+        this.baseTactics[side] = updatedTactics;
+        this.state.tactics[side] = updatedTactics;
+        this.updateTacticalTargetPositions();
+
+        const event = this.createEvent('tactical_change', player, undefined, reason);
+        this.events.push(event);
+
+        return event;
+    }
+
+    applyRoleChange(
+        playerId: string,
+        role: Position,
+        reason: string = 'manager_role_change',
+    ): RealTimeMatchEvent | null {
+        const player = this.playerById(playerId);
+
+        if (!player) {
+            return null;
+        }
+
+        player.role = role;
+        this.updateTacticalTargetPositions();
+
+        const event = this.createEvent('role_change', player, undefined, reason);
+        this.events.push(event);
+
+        return event;
     }
 
     tick(): MatchSlice {
