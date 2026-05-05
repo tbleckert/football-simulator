@@ -3296,8 +3296,10 @@ export default class RealTimeEngine {
             .filter((player) => player !== taker && player.role !== Position.GK)
             .slice()
             .sort((a, b) => {
-                const aScore = a.attributes.heading + a.attributes.jumpingReach - this.distance(a, goal) * 0.2;
-                const bScore = b.attributes.heading + b.attributes.jumpingReach - this.distance(b, goal) * 0.2;
+                const aSetPieceBonus = this.state.restart?.phase === 'corner' && defencePositions.includes(a.role) ? 8 : 0;
+                const bSetPieceBonus = this.state.restart?.phase === 'corner' && defencePositions.includes(b.role) ? 8 : 0;
+                const aScore = a.attributes.heading + a.attributes.jumpingReach + aSetPieceBonus - this.distance(a, goal) * 0.2;
+                const bScore = b.attributes.heading + b.attributes.jumpingReach + bSetPieceBonus - this.distance(b, goal) * 0.2;
 
                 return bScore - aScore;
             })[0] || null;

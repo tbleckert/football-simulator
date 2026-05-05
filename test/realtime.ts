@@ -1069,6 +1069,53 @@ if (cleanPasser && cleanReceiver) {
 
 assert.ok(cleanPassEngine.events.some((event) => event.type === 'receive' && event.playerId === cleanReceiver?.id), 'an unpressured short pass should be received cleanly');
 
+const throughReceiveEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0]),
+});
+throughReceiveEngine.start();
+
+const throughPasser = throughReceiveEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+const throughReceiver = throughReceiveEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LF);
+
+assert.ok(throughPasser && throughReceiver, 'the through-ball receive scenario needs a passer and runner');
+
+if (throughPasser && throughReceiver) {
+    throughPasser.x = 62;
+    throughPasser.y = 34;
+    throughReceiver.x = 74;
+    throughReceiver.y = 34;
+    throughReceiveEngine.state.ball.owner = null;
+    throughReceiveEngine.state.ball.x = throughReceiver.x;
+    throughReceiveEngine.state.ball.y = throughReceiver.y;
+    throughReceiveEngine.state.ball.velocity = { x: 0, y: 0 };
+    throughReceiveEngine.state.activeBallAction = {
+        type: 'pass',
+        from: throughPasser,
+        teamSide: 'home',
+        origin: {
+            x: throughPasser.x,
+            y: throughPasser.y,
+        },
+        target: {
+            x: throughReceiver.x,
+            y: throughReceiver.y,
+        },
+        targetPlayer: throughReceiver,
+        inaccurate: false,
+        quality: 0.92,
+        estimatedArrivalTime: throughReceiveEngine.state.time,
+        passSpeed: 16,
+        receiveDifficulty: 0.18,
+        targetKind: 'space',
+        route: 'through_ball',
+    };
+    throughReceiveEngine.tick();
+}
+
+assert.ok(throughReceiveEngine.events.some((event) => event.type === 'receive' && event.playerId === throughReceiver?.id), 'a well-weighted through ball should be receivable in stride');
+
 const secondBallEngine = new RealTimeEngine(homeTeam, awayTeam, {
     tickSeconds: 0.25,
     matchLengthSeconds: 10,
@@ -1116,6 +1163,38 @@ if (secondBallPasser && secondBallReceiver) {
 
 assert.ok(secondBallEngine.events.some((event) => event.type === 'second_ball'), 'a slightly misplaced pass should become a second ball');
 assert.ok(secondBallEngine.state.secondBall, 'second-ball state should stay visible for nearby players to attack');
+
+const reboundRecoveryEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: seededRandom(142),
+});
+reboundRecoveryEngine.start();
+
+const reboundShooter = reboundRecoveryEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+
+assert.ok(reboundShooter, 'the rebound scenario needs an attacking player');
+
+if (reboundShooter) {
+    reboundShooter.x = 94;
+    reboundShooter.y = 34;
+    reboundRecoveryEngine.state.ball.owner = null;
+    reboundRecoveryEngine.state.ball.x = reboundShooter.x;
+    reboundRecoveryEngine.state.ball.y = reboundShooter.y;
+    reboundRecoveryEngine.state.ball.velocity = { x: 0, y: 0 };
+    reboundRecoveryEngine.state.secondBall = {
+        x: reboundShooter.x,
+        y: reboundShooter.y,
+        expiresAt: reboundRecoveryEngine.state.time + 4,
+        teamSide: 'home',
+        sourcePlayerId: reboundShooter.id,
+        source: 'rebound',
+    };
+    reboundRecoveryEngine.tick();
+
+    assert.equal(reboundRecoveryEngine.state.possession.lastRecoveryType, 'rebound', 'rebound recoveries should mark the possession context');
+    assert.equal(engineInternals(reboundRecoveryEngine).shotRoute(reboundShooter, 10), 'rebound', 'rebound recoveries should create second-phase shot context');
+}
 
 const blockedCrossEngine = new RealTimeEngine(homeTeam, awayTeam, {
     tickSeconds: 0.25,
