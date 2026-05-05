@@ -140,6 +140,52 @@ function velocityTowards(from: { x: number, y: number }, to: { x: number, y: num
     };
 }
 
+function possessionPassCounts(events: { type: string, teamSide?: string }[]): number[] {
+    const possessionEvents = new Set([
+        'kickoff',
+        'throw_in',
+        'corner',
+        'goal_kick',
+        'free_kick',
+        'penalty',
+        'pass',
+        'receive',
+        'interception',
+        'tackle',
+        'recovery',
+        'save',
+        'goalkeeper_claim',
+    ]);
+    const counts: number[] = [];
+    let activeSide = '';
+    let activePasses = 0;
+
+    events.forEach((event) => {
+        if (!event.teamSide || !possessionEvents.has(event.type)) {
+            return;
+        }
+
+        if (event.teamSide !== activeSide) {
+            if (activeSide) {
+                counts.push(activePasses);
+            }
+
+            activeSide = event.teamSide;
+            activePasses = 0;
+        }
+
+        if (event.type === 'pass') {
+            activePasses += 1;
+        }
+    });
+
+    if (activeSide) {
+        counts.push(activePasses);
+    }
+
+    return counts;
+}
+
 const homeTeam = createTeam(true, 'Home', [
     Position.GK,
     Position.LB,
@@ -208,6 +254,7 @@ assert.ok(allEvents.includes('match_start'), 'the event stream should include ma
 assert.ok(allEvents.includes('kickoff'), 'the event stream should include kickoff');
 assert.ok(allEvents.includes('pass'), 'the event stream should include passes');
 assert.ok(openPlayEvents.length > 0, 'the event stream should include open-play events');
+assert.ok(Math.max(...possessionPassCounts(engine.events)) >= 5, 'teams should be able to complete a 5-pass sequence');
 
 const throwInEngine = new RealTimeEngine(homeTeam, awayTeam, {
     matchLengthSeconds: 10,
@@ -1028,6 +1075,117 @@ if (secondBallPasser && secondBallReceiver) {
 
 assert.ok(secondBallEngine.events.some((event) => event.type === 'second_ball'), 'a slightly misplaced pass should become a second ball');
 assert.ok(secondBallEngine.state.secondBall, 'second-ball state should stay visible for nearby players to attack');
+
+const recycleEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0, 0]),
+});
+recycleEngine.start();
+
+const recyclingCenterBack = recycleEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LCB);
+
+assert.ok(recyclingCenterBack, 'the recycle scenario needs a center back');
+
+if (recyclingCenterBack) {
+    recyclingCenterBack.x = 32;
+    recyclingCenterBack.y = 28;
+    recyclingCenterBack.actionCooldown = 0;
+    recycleEngine.state.ball.owner = recyclingCenterBack;
+    recycleEngine.state.ball.x = recyclingCenterBack.x;
+    recycleEngine.state.ball.y = recyclingCenterBack.y;
+    recycleEngine.tick();
+}
+
+assert.ok(recycleEngine.events.some((event) => event.type === 'pass' && ['lateral_support', 'backward_reset'].includes(event.outcome || '')), 'a low-pressure center back should be able to recycle possession');
+
+const longGoalKickEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0.95]),
+});
+longGoalKickEngine.start();
+
+const goalKickTaker = longGoalKickEngine.state.players.find((player) => player.side === 'home' && player.role === Position.GK);
+const goalKickTarget = longGoalKickEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const goalKickOpponent = longGoalKickEngine.state.players.find((player) => player.side === 'away' && player.role === Position.LCB);
+
+assert.ok(goalKickTaker && goalKickTarget && goalKickOpponent, 'the long goal-kick scenario needs a taker, target, and opponent');
+
+if (goalKickTaker && goalKickTarget && goalKickOpponent) {
+    goalKickTarget.x = 60;
+    goalKickTarget.y = 34;
+    goalKickOpponent.x = 61;
+    goalKickOpponent.y = 34;
+    longGoalKickEngine.state.ball.owner = null;
+    longGoalKickEngine.state.ball.x = goalKickTarget.x;
+    longGoalKickEngine.state.ball.y = goalKickTarget.y;
+    longGoalKickEngine.state.ball.velocity = { x: 0, y: 0 };
+    longGoalKickEngine.state.activeBallAction = {
+        type: 'pass',
+        from: goalKickTaker,
+        teamSide: 'home',
+        origin: {
+            x: 6,
+            y: 34,
+        },
+        target: {
+            x: goalKickTarget.x,
+            y: goalKickTarget.y,
+        },
+        targetPlayer: goalKickTarget,
+        inaccurate: false,
+        quality: 0.72,
+        estimatedArrivalTime: longGoalKickEngine.state.time,
+        passSpeed: 24,
+        receiveDifficulty: 0.72,
+        targetKind: 'contest',
+        route: 'long_kick',
+        restartType: 'goal_kick',
+    };
+    longGoalKickEngine.tick();
+}
+
+assert.ok(longGoalKickEngine.events.some((event) => event.type === 'aerial_duel' && event.outcome === 'loose_second_ball'), 'a long goal kick should be able to create an aerial second ball');
+assert.ok(longGoalKickEngine.state.secondBall, 'long goal-kick second balls should remain recoverable');
+
+const poorAngleEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0.99, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0, 0]),
+});
+poorAngleEngine.start();
+
+const poorAngleAttacker = poorAngleEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+
+assert.ok(poorAngleAttacker, 'the poor-angle scenario needs an attacker');
+
+if (poorAngleAttacker) {
+    poorAngleAttacker.x = 92;
+    poorAngleAttacker.y = 16;
+    poorAngleAttacker.actionCooldown = 0;
+    poorAngleEngine.state.ball.owner = poorAngleAttacker;
+    poorAngleEngine.state.ball.x = poorAngleAttacker.x;
+    poorAngleEngine.state.ball.y = poorAngleAttacker.y;
+    poorAngleEngine.tick();
+}
+
+assert.ok(poorAngleEngine.events.some((event) => event.type === 'pass'), 'a poor-angle attacker should be able to choose a pass');
+assert.equal(poorAngleEngine.events.some((event) => event.type === 'shot'), false, 'a poor-angle attacker should not force a shot');
+
+const longShotRateSeeds = [20260504, 20260505, 20260506];
+const longShotRates = longShotRateSeeds.map((seed) => {
+    const longShotRateEngine = new RealTimeEngine(homeTeam, awayTeam, {
+        matchLengthSeconds: 90 * 60,
+        random: seededRandom(seed),
+    });
+    longShotRateEngine.simulate(90 * 60);
+
+    const shots = longShotRateEngine.events.filter((event) => event.type === 'shot');
+    const longShots = shots.filter((event) => event.outcome === 'long_shot');
+
+    return shots.length ? longShots.length / shots.length : 0;
+});
+
+assert.ok(longShotRates.every((rate) => rate <= 0.12), 'long shots should stay occasional across several seeds');
 
 console.log({
     snapshots: snapshots.length,
