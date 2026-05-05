@@ -27,6 +27,37 @@ export type MatchPhase =
     | 'substitution'
     | 'half_time'
     | 'full_time';
+export type FieldZone =
+    'defensive_third'
+    | 'middle_third'
+    | 'attacking_third'
+    | 'final_third'
+    | 'wide_left'
+    | 'wide_right'
+    | 'half_space_left'
+    | 'half_space_right'
+    | 'central_lane'
+    | 'box'
+    | 'byline';
+export type AttackPattern =
+    'none'
+    | 'patient_buildup'
+    | 'midfield_progression'
+    | 'final_third_probe'
+    | 'wide_overload'
+    | 'switch_of_play'
+    | 'overlap'
+    | 'underlap'
+    | 'through_ball'
+    | 'cross'
+    | 'cutback'
+    | 'late_run'
+    | 'rebound'
+    | 'second_ball'
+    | 'set_piece'
+    | 'central_combination'
+    | 'defensive_transition';
+export type BallRecoverySource = 'rebound' | 'second_ball';
 export type PlayerIntentType =
     'hold_shape'
     | 'press'
@@ -152,6 +183,7 @@ export interface SecondBallState {
     expiresAt: number;
     teamSide: TeamSide;
     sourcePlayerId: string;
+    source: BallRecoverySource;
 }
 
 export interface ActiveBallAction {
@@ -169,6 +201,26 @@ export interface ActiveBallAction {
     targetKind?: 'feet' | 'space' | 'contest';
     route?: string;
     restartType?: RestartState['phase'];
+    chanceQuality?: number;
+}
+
+export interface PossessionContext {
+    id: number;
+    teamSide: TeamSide | null;
+    startTime: number;
+    startPhase: MatchPhase;
+    passCount: number;
+    lastPassRoute: string | null;
+    lastSuccessfulPassRoute: string | null;
+    lastProgressionZone: FieldZone | null;
+    finalThirdEntries: number;
+    wideEntries: number;
+    boxEntries: number;
+    secondBallRecoveries: number;
+    setPieceOrigin: RestartState['phase'] | null;
+    activeAttackPattern: AttackPattern;
+    currentFieldZones: FieldZone[];
+    lastRecoveryType: BallRecoverySource | null;
 }
 
 export interface MatchState {
@@ -189,6 +241,7 @@ export interface MatchState {
     activeBallAction: ActiveBallAction | null;
     secondBall: SecondBallState | null;
     restart: RestartState | null;
+    possession: PossessionContext;
     addedTime: {
         firstHalf: number;
         secondHalf: number;
@@ -218,6 +271,10 @@ export interface RealTimeMatchEvent {
         away: number;
     };
     outcome?: string;
+    fieldZones: FieldZone[];
+    possession: PossessionContext;
+    activeAttackPattern: AttackPattern;
+    chanceQuality?: number;
     replayWindow?: {
         startTime: number;
         endTime: number;
@@ -262,11 +319,20 @@ export interface MatchSnapshot {
         ownerId: string | null;
     };
     activePassTarget: Vector2 | null;
+    activeShot: {
+        route: string;
+        chanceQuality: number;
+        target: Vector2;
+    } | null;
     secondBall: {
         x: number;
         y: number;
         expiresAt: number;
+        source: BallRecoverySource;
     } | null;
+    possession: PossessionContext;
+    fieldZones: FieldZone[];
+    activeAttackPattern: AttackPattern;
     players: MatchSnapshotPlayer[];
     events: RealTimeMatchEvent[];
 }
@@ -330,6 +396,7 @@ export default class RealTimeEngine {
     private baseTactics: { home: Tactics, away: Tactics };
     private nextPhaseAfterSnapshot: MatchPhase | null = null;
     private clearRestartAfterSnapshot = false;
+    private nextPossessionId = 1;
 
     constructor(homeTeam: Team, awayTeam: Team, options: Partial<RealTimeEngineOptions> = {}) {
         this.homeTeam = homeTeam;
@@ -376,6 +443,7 @@ export default class RealTimeEngine {
             activeBallAction: null,
             secondBall: null,
             restart: null,
+            possession: this.emptyPossessionContext(),
             addedTime: {
                 firstHalf: 0,
                 secondHalf: 0,
@@ -546,6 +614,119 @@ export default class RealTimeEngine {
             penaltyThreshold: this.clamp(options?.penaltyThreshold ?? defaultReferee.penaltyThreshold, 0, 100),
             bookingThreshold: this.clamp(options?.bookingThreshold ?? defaultReferee.bookingThreshold, 0, 100),
         };
+    }
+
+    private emptyPossessionContext(): PossessionContext {
+        return {
+            id: 0,
+            teamSide: null,
+            startTime: 0,
+            startPhase: 'kickoff',
+            passCount: 0,
+            lastPassRoute: null,
+            lastSuccessfulPassRoute: null,
+            lastProgressionZone: null,
+            finalThirdEntries: 0,
+            wideEntries: 0,
+            boxEntries: 0,
+            secondBallRecoveries: 0,
+            setPieceOrigin: null,
+            activeAttackPattern: 'none',
+            currentFieldZones: [],
+            lastRecoveryType: null,
+        };
+    }
+
+    private startPossession(
+        side: TeamSide,
+        startPhase: MatchPhase,
+        setPieceOrigin: RestartState['phase'] | null = null,
+    ): void {
+        const currentFieldZones = this.fieldZonesFor(side, this.state.ball);
+
+        this.state.possession = {
+            id: this.nextPossessionId,
+            teamSide: side,
+            startTime: this.state.time,
+            startPhase,
+            passCount: 0,
+            lastPassRoute: null,
+            lastSuccessfulPassRoute: null,
+            lastProgressionZone: this.progressionZone(currentFieldZones),
+            finalThirdEntries: currentFieldZones.includes('final_third') ? 1 : 0,
+            wideEntries: this.hasWideZone(currentFieldZones) ? 1 : 0,
+            boxEntries: currentFieldZones.includes('box') ? 1 : 0,
+            secondBallRecoveries: 0,
+            setPieceOrigin,
+            activeAttackPattern: setPieceOrigin ? 'set_piece' : this.attackPatternFromZones(currentFieldZones),
+            currentFieldZones,
+            lastRecoveryType: null,
+        };
+        this.nextPossessionId += 1;
+    }
+
+    private possessionSnapshot(): PossessionContext {
+        return {
+            ...this.state.possession,
+            currentFieldZones: [...this.state.possession.currentFieldZones],
+        };
+    }
+
+    private recordPossessionPosition(side: TeamSide, point: Vector2): void {
+        if (this.state.possession.teamSide !== side) {
+            return;
+        }
+
+        const zones = this.fieldZonesFor(side, point);
+        const previousZones = this.state.possession.currentFieldZones;
+
+        if (!previousZones.includes('final_third') && zones.includes('final_third')) {
+            this.state.possession.finalThirdEntries += 1;
+        }
+
+        if (!this.hasWideZone(previousZones) && this.hasWideZone(zones)) {
+            this.state.possession.wideEntries += 1;
+        }
+
+        if (!previousZones.includes('box') && zones.includes('box')) {
+            this.state.possession.boxEntries += 1;
+        }
+
+        this.state.possession.currentFieldZones = zones;
+        this.state.possession.lastProgressionZone = this.progressionZone(zones);
+
+        if (!this.routeLedAttackPattern(this.state.possession.activeAttackPattern)) {
+            this.state.possession.activeAttackPattern = this.attackPatternFromZones(zones);
+        }
+    }
+
+    private recordPassAttempt(route: string, target: Vector2): void {
+        const possession = this.state.possession;
+
+        if (!possession.teamSide) {
+            return;
+        }
+
+        possession.passCount += 1;
+        possession.lastPassRoute = route;
+        possession.activeAttackPattern = this.attackPatternFromPassRoute(route);
+        this.recordPossessionPosition(possession.teamSide, target);
+    }
+
+    private recordSuccessfulPass(route: string, receiver: SimulatedPlayer): void {
+        if (this.state.possession.teamSide !== receiver.side) {
+            return;
+        }
+
+        this.state.possession.lastSuccessfulPassRoute = route;
+        this.state.possession.activeAttackPattern = this.attackPatternFromPassRoute(route);
+        this.recordPossessionPosition(receiver.side, receiver);
+    }
+
+    private recordSecondBallRecovery(source: BallRecoverySource): void {
+        this.state.possession.secondBallRecoveries += 1;
+        this.state.possession.lastRecoveryType = source;
+        this.state.possession.activeAttackPattern = source;
     }
 
     private createPlayers(
@@ -733,9 +914,13 @@ export default class RealTimeEngine {
         this.state.ball.y = pitch.width / 2;
         this.state.ball.velocity = { x: 0, y: 0 };
         this.state.ball.owner = player;
-        this.registerTouch(player);
         this.state.activeBallAction = null;
         this.state.secondBall = null;
+
+        if (player) {
+            this.startPossession(side, 'kickoff');
+            this.registerTouch(player);
+        }
 
         if (player) {
             player.x = this.state.ball.x;
@@ -906,6 +1091,7 @@ export default class RealTimeEngine {
             restartType: type,
         };
         this.state.secondBall = null;
+        this.recordPassAttempt(outcome, restartTarget);
         taker.actionCooldown = 1.2;
         this.nextPhaseAfterSnapshot = 'open_play';
         this.clearRestartAfterSnapshot = true;
@@ -1013,6 +1199,7 @@ export default class RealTimeEngine {
         this.state.ball.y = restart.position.y;
         this.state.ball.velocity = { x: 0, y: 0 };
         this.state.ball.owner = taker;
+        this.startPossession(teamSide, phase, phase);
         this.registerTouch(taker);
         this.placePlayersForRestart(restart, taker);
 
@@ -1454,6 +1641,7 @@ export default class RealTimeEngine {
             route,
         };
         this.state.secondBall = null;
+        this.recordPassAttempt(route, target);
         targetPlayer.currentIntent = this.intentForPassReceiver(targetPlayer, this.state.activeBallAction);
         owner.actionCooldown = 0.7 + (1 - this.tactics(owner.side).tempo / 100) * 0.8;
 
@@ -1935,13 +2123,17 @@ export default class RealTimeEngine {
             return [];
         }
 
-        const wasSecondBall = Boolean(this.state.secondBall);
+        const secondBall = this.state.secondBall;
 
         this.state.ball.owner = player;
         this.state.ball.velocity = { x: 0, y: 0 };
         this.state.secondBall = null;
-        player.actionCooldown = wasSecondBall ? 0.42 : 0.35;
+        player.actionCooldown = secondBall ? 0.42 : 0.35;
         this.registerTouch(player);
+
+        if (secondBall) {
+            this.recordSecondBallRecovery(secondBall.source);
+        }
 
         return [this.createEvent('recovery', player)];
     }
@@ -2004,6 +2196,7 @@ export default class RealTimeEngine {
             this.state.secondBall = null;
             receiver.actionCooldown = roll < firstTouchChance * 0.82 ? 0.18 : 0.45;
             this.registerTouch(receiver);
+            this.recordSuccessfulPass(action.route || 'open_play', receiver);
 
             return [this.createEvent('receive', receiver, action.from, roll < firstTouchChance * 0.82 ? 'clean_receive' : 'heavy_touch_retained')];
         }
@@ -2086,6 +2279,7 @@ export default class RealTimeEngine {
             expiresAt: this.state.time + (action.targetKind === 'contest' ? 5 : 4),
             teamSide: action.teamSide,
             sourcePlayerId: action.from.id,
+            source: 'second_ball',
         };
 
         return this.createEvent('second_ball', action.targetPlayer || action.from, action.from, outcome);
@@ -2239,6 +2433,7 @@ export default class RealTimeEngine {
                 expiresAt: this.state.time + 5,
                 teamSide: action.teamSide,
                 sourcePlayerId: action.from.id,
+                source: 'second_ball',
             };
 
             return this.createEvent('aerial_duel', action.targetPlayer, opponent, 'loose_second_ball');
@@ -2301,8 +2496,19 @@ export default class RealTimeEngine {
                 this.state.ball.x = this.clamp(goalkeeper.x + this.attackDirection(action.teamSide) * -2, 0, pitch.length);
                 this.state.ball.y = this.clamp(goalkeeper.y + (this.random() - 0.5) * 7, 0, pitch.width);
                 this.state.ball.velocity = { x: 0, y: 0 };
+                this.state.secondBall = {
+                    x: this.state.ball.x,
+                    y: this.state.ball.y,
+                    expiresAt: this.state.time + 4,
+                    teamSide: action.teamSide,
+                    sourcePlayerId: action.from.id,
+                    source: 'rebound',
+                };
+                this.registerTouch(goalkeeper);
 
-                return [this.createEvent('save', goalkeeper, action.from, 'goalkeeper_spill')];
+                return [this.createEvent('save', goalkeeper, action.from, 'goalkeeper_spill', {
+                    chanceQuality: action.chanceQuality || action.quality,
+                })];
             }
 
             this.state.ball.owner = goalkeeper;
@@ -2376,13 +2582,27 @@ export default class RealTimeEngine {
                     y: this.round(this.state.activeBallAction.target.y),
                 }
                 : null,
+            activeShot: this.state.activeBallAction?.type === 'shot'
+                ? {
+                    route: this.state.activeBallAction.route || 'open_play',
+                    chanceQuality: this.round(this.state.activeBallAction.chanceQuality || this.state.activeBallAction.quality),
+                    target: {
+                        x: this.round(this.state.activeBallAction.target.x),
+                        y: this.round(this.state.activeBallAction.target.y),
+                    },
+                }
+                : null,
             secondBall: this.state.secondBall
                 ? {
                     x: this.round(this.state.secondBall.x),
                     y: this.round(this.state.secondBall.y),
                     expiresAt: this.roundTime(this.state.secondBall.expiresAt),
+                    source: this.state.secondBall.source,
                 }
                 : null,
+            possession: this.possessionSnapshot(),
+            fieldZones: [...this.state.possession.currentFieldZones],
+            activeAttackPattern: this.state.possession.activeAttackPattern,
             players: this.state.players.map((player) => ({
                 id: player.id,
                 teamSide: player.side,
@@ -2419,12 +2639,17 @@ export default class RealTimeEngine {
         player?: SimulatedPlayer,
         secondaryPlayer?: SimulatedPlayer,
         outcome?: string,
+        details: Partial<Pick<RealTimeMatchEvent, 'chanceQuality'>> = {},
     ): RealTimeMatchEvent {
+        const teamSide = player?.side || this.state.possession.teamSide || undefined;
+        const fieldZones = teamSide ? this.fieldZonesFor(teamSide, this.state.ball) : [];
+        const activeShot = this.state.activeBallAction?.type === 'shot' ? this.state.activeBallAction : null;
+
         return {
             type,
             time: this.state.time,
             team: player?.team,
-            teamSide: player?.side,
+            teamSide,
             player: player?.player,
             playerId: player?.id,
             secondaryPlayer: secondaryPlayer?.player,
@@ -2435,6 +2660,10 @@ export default class RealTimeEngine {
             },
             score: { ...this.state.score },
             outcome,
+            fieldZones,
+            possession: this.possessionSnapshot(),
+            activeAttackPattern: this.state.possession.activeAttackPattern,
+            chanceQuality: details.chanceQuality ?? activeShot?.chanceQuality,
         };
     }
 
@@ -3175,13 +3404,143 @@ export default class RealTimeEngine {
         };
     }
 
+    private fieldZonesFor(side: TeamSide, point: Vector2): FieldZone[] {
+        const attackingX = this.attackDirection(side) > 0 ? point.x : pitch.length - point.x;
+        const attackingY = this.attackDirection(side) > 0 ? point.y : pitch.width - point.y;
+        const zones: FieldZone[] = [];
+
+        if (attackingX < pitch.length / 3) {
+            zones.push('defensive_third');
+        } else if (attackingX < pitch.length * 2 / 3) {
+            zones.push('middle_third');
+        } else {
+            zones.push('attacking_third', 'final_third');
+        }
+
+        if (attackingY < pitch.width * 0.2) {
+            zones.push('wide_left');
+        } else if (attackingY < pitch.width * 0.4) {
+            zones.push('half_space_left');
+        } else if (attackingY <= pitch.width * 0.6) {
+            zones.push('central_lane');
+        } else if (attackingY <= pitch.width * 0.8) {
+            zones.push('half_space_right');
+        } else {
+            zones.push('wide_right');
+        }
+
+        if (attackingX >= pitch.length - 18 && Math.abs(attackingY - pitch.width / 2) <= 22) {
+            zones.push('box');
+        }
+
+        if (attackingX >= pitch.length - 7) {
+            zones.push('byline');
+        }
+
+        return zones;
+    }
+
+    private progressionZone(zones: FieldZone[]): FieldZone | null {
+        if (zones.includes('final_third')) {
+            return 'final_third';
+        }
+
+        if (zones.includes('attacking_third')) {
+            return 'attacking_third';
+        }
+
+        if (zones.includes('middle_third')) {
+            return 'middle_third';
+        }
+
+        if (zones.includes('defensive_third')) {
+            return 'defensive_third';
+        }
+
+        return null;
+    }
+
+    private hasWideZone(zones: FieldZone[]): boolean {
+        return zones.includes('wide_left') || zones.includes('wide_right');
+    }
+
+    private routeLedAttackPattern(pattern: AttackPattern): boolean {
+        return [
+            'switch_of_play',
+            'overlap',
+            'underlap',
+            'through_ball',
+            'cross',
+            'cutback',
+            'late_run',
+            'rebound',
+            'second_ball',
+            'set_piece',
+            'central_combination',
+            'defensive_transition',
+        ].includes(pattern);
+    }
+
+    private attackPatternFromZones(zones: FieldZone[]): AttackPattern {
+        if (zones.includes('box') || zones.includes('final_third')) {
+            return this.hasWideZone(zones) || zones.includes('byline') ? 'wide_overload' : 'final_third_probe';
+        }
+
+        if (zones.includes('middle_third')) {
+            return 'midfield_progression';
+        }
+
+        if (zones.includes('defensive_third')) {
+            return 'patient_buildup';
+        }
+
+        return 'none';
+    }
+
+    private attackPatternFromPassRoute(route: string): AttackPattern {
+        if (route === 'switch_of_play') {
+            return 'switch_of_play';
+        }
+
+        if (route === 'overlap_pass') {
+            return 'overlap';
+        }
+
+        if (route === 'underlap_pass') {
+            return 'underlap';
+        }
+
+        if (route === 'through_ball') {
+            return 'through_ball';
+        }
+
+        if (route === 'cross') {
+            return 'cross';
+        }
+
+        if (route === 'cutback') {
+            return 'cutback';
+        }
+
+        if (['line_breaking_pass', 'wall_pass', 'progressive_pass'].includes(route)) {
+            return 'central_combination';
+        }
+
+        return this.attackPatternFromZones(this.state.possession.currentFieldZones);
+    }
+
     private registerTouch(player: SimulatedPlayer | null): void {
         if (!player) {
             return;
         }
 
+        if (this.state.possession.teamSide !== player.side) {
+            this.startPossession(player.side, this.state.phase);
+        }
+
         this.state.ball.lastTouchSide = player.side;
         this.state.ball.lastTouchPlayerId = player.id;
+        this.recordPossessionPosition(player.side, this.state.ball);
     }
 
     private mirrorForSide(side: TeamSide, point: Vector2, period: ActivePeriod): Vector2 {

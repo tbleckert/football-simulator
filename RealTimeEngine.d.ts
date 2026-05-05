@@ -9,6 +9,9 @@ export interface Vector2 {
 export type TeamSide = 'home' | 'away';
 export type Mentality = 'defensive' | 'balanced' | 'attacking';
 export type MatchPhase = 'kickoff' | 'open_play' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'injury_stoppage' | 'substitution' | 'half_time' | 'full_time';
+export type FieldZone = 'defensive_third' | 'middle_third' | 'attacking_third' | 'final_third' | 'wide_left' | 'wide_right' | 'half_space_left' | 'half_space_right' | 'central_lane' | 'box' | 'byline';
+export type AttackPattern = 'none' | 'patient_buildup' | 'midfield_progression' | 'final_third_probe' | 'wide_overload' | 'switch_of_play' | 'overlap' | 'underlap' | 'through_ball' | 'cross' | 'cutback' | 'late_run' | 'rebound' | 'second_ball' | 'set_piece' | 'central_combination' | 'defensive_transition';
+export type BallRecoverySource = 'rebound' | 'second_ball';
 export type PlayerIntentType = 'hold_shape' | 'press' | 'cover_passing_lane' | 'track_runner' | 'overlap' | 'underlap' | 'attack_box' | 'drop_between_lines' | 'drift_wide' | 'make_forward_run' | 'recover_shape' | 'support_carrier' | 'support' | 'receive' | 'receive_pass' | 'dribble' | 'pass' | 'shoot' | 'recover' | 'attack_second_ball';
 export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'dribble' | 'challenge' | 'yellow_card' | 'red_card' | 'injury' | 'substitution' | 'advantage' | 'aerial_duel' | 'blocked_shot' | 'goalkeeper_claim' | 'goalkeeper_punch' | 'pass' | 'receive' | 'second_ball' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
 export interface Tactics {
@@ -75,6 +78,7 @@ export interface SecondBallState {
     expiresAt: number;
     teamSide: TeamSide;
     sourcePlayerId: string;
+    source: BallRecoverySource;
 }
 export interface ActiveBallAction {
     type: 'pass' | 'shot';
@@ -91,6 +95,25 @@ export interface ActiveBallAction {
     targetKind?: 'feet' | 'space' | 'contest';
     route?: string;
     restartType?: RestartState['phase'];
+    chanceQuality?: number;
+}
+export interface PossessionContext {
+    id: number;
+    teamSide: TeamSide | null;
+    startTime: number;
+    startPhase: MatchPhase;
+    passCount: number;
+    lastPassRoute: string | null;
+    lastSuccessfulPassRoute: string | null;
+    lastProgressionZone: FieldZone | null;
+    finalThirdEntries: number;
+    wideEntries: number;
+    boxEntries: number;
+    secondBallRecoveries: number;
+    setPieceOrigin: RestartState['phase'] | null;
+    activeAttackPattern: AttackPattern;
+    currentFieldZones: FieldZone[];
+    lastRecoveryType: BallRecoverySource | null;
 }
 export interface MatchState {
     time: number;
@@ -110,6 +133,7 @@ export interface MatchState {
     activeBallAction: ActiveBallAction | null;
     secondBall: SecondBallState | null;
     restart: RestartState | null;
+    possession: PossessionContext;
     addedTime: {
         firstHalf: number;
         secondHalf: number;
@@ -138,6 +162,10 @@ export interface RealTimeMatchEvent {
         away: number;
     };
     outcome?: string;
+    fieldZones: FieldZone[];
+    possession: PossessionContext;
+    activeAttackPattern: AttackPattern;
+    chanceQuality?: number;
     replayWindow?: {
         startTime: number;
         endTime: number;
@@ -180,11 +208,20 @@ export interface MatchSnapshot {
         ownerId: string | null;
     };
     activePassTarget: Vector2 | null;
+    activeShot: {
+        route: string;
+        chanceQuality: number;
+        target: Vector2;
+    } | null;
     secondBall: {
         x: number;
         y: number;
         expiresAt: number;
+        source: BallRecoverySource;
     } | null;
+    possession: PossessionContext;
+    fieldZones: FieldZone[];
+    activeAttackPattern: AttackPattern;
     players: MatchSnapshotPlayer[];
     events: RealTimeMatchEvent[];
 }
@@ -215,6 +252,7 @@ export default class RealTimeEngine {
     private baseTactics;
     private nextPhaseAfterSnapshot;
     private clearRestartAfterSnapshot;
+    private nextPossessionId;
     constructor(homeTeam: Team, awayTeam: Team, options?: Partial<RealTimeEngineOptions>);
     start(): MatchSnapshot;
     simulate(untilSeconds?: number): MatchSnapshot[];
@@ -223,6 +261,13 @@ export default class RealTimeEngine {
     private registerAddedTime;
     private tacticsFromOptions;
     private refereeFromOptions;
+    private emptyPossessionContext;
+    private startPossession;
+    private possessionSnapshot;
+    private recordPossessionPosition;
+    private recordPassAttempt;
+    private recordSuccessfulPass;
+    private recordSecondBallRecovery;
     private createPlayers;
     private createBenchPlayers;
     private generateBenchPlayers;
@@ -347,6 +392,12 @@ export default class RealTimeEngine {
     private goalCenterAgainst;
     private attackingSideForGoalLine;
     private goalKickPosition;
+    private fieldZonesFor;
+    private progressionZone;
+    private hasWideZone;
+    private routeLedAttackPattern;
+    private attackPatternFromZones;
+    private attackPatternFromPassRoute;
     private registerTouch;
     private mirrorForSide;
     private mentalityShift;
