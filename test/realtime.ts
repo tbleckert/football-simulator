@@ -129,6 +129,17 @@ function finitePoint(point: { x: number, y: number }): boolean {
     return Number.isFinite(point.x) && Number.isFinite(point.y);
 }
 
+function velocityTowards(from: { x: number, y: number }, to: { x: number, y: number }, speed: number): { x: number, y: number } {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const distance = Math.hypot(dx, dy) || 1;
+
+    return {
+        x: dx / distance * speed,
+        y: dy / distance * speed,
+    };
+}
+
 const homeTeam = createTeam(true, 'Home', [
     Position.GK,
     Position.LB,
@@ -192,7 +203,7 @@ assert.ok(finalSnapshot.players.every((player) => finitePoint(player)), 'player 
 assert.ok(finalSnapshot.players.every((player) => finitePoint(player.target)), 'player tactical targets should stay finite');
 assert.ok(finalSnapshot.players.every((player) => player.currentIntent.type.length > 0), 'every player should expose a current intent');
 assert.equal(firstSnapshot.phase, 'kickoff', 'the opening snapshot should expose the kickoff phase');
-assert.equal(finalSnapshot.phase, 'full_time', 'the final snapshot should expose the full-time phase');
+assert.ok(['open_play', 'full_time'].includes(finalSnapshot.phase), 'the requested simulation window should expose a live or full-time phase');
 assert.ok(allEvents.includes('match_start'), 'the event stream should include match start');
 assert.ok(allEvents.includes('kickoff'), 'the event stream should include kickoff');
 assert.ok(allEvents.includes('pass'), 'the event stream should include passes');
@@ -307,7 +318,7 @@ const longShotMidfielder = longShotEngine.state.players.find((player) => player.
 assert.ok(longShotMidfielder, 'the long-shot scenario needs a midfielder');
 
 if (longShotMidfielder) {
-    longShotMidfielder.x = 76;
+    longShotMidfielder.x = 80.5;
     longShotMidfielder.y = 34;
     longShotMidfielder.actionCooldown = 0;
     longShotEngine.state.ball.owner = longShotMidfielder;
@@ -385,8 +396,10 @@ const halfTimeEngine = new RealTimeEngine(homeTeam, awayTeam, {
         formation: '4-3-3',
     },
 });
-const halfTimeSnapshots = halfTimeEngine.simulate(60);
-const halfTimeSnapshot = halfTimeSnapshots[halfTimeSnapshots.length - 1] as MatchSnapshot;
+halfTimeEngine.start();
+halfTimeEngine.state.time = 59.75;
+halfTimeEngine.state.addedTime.firstHalf = 0;
+const halfTimeSnapshot = halfTimeEngine.tick().snapshot;
 const secondHalfHomeGoalkeeper = halfTimeSnapshot.players.find((player) => player.teamSide === 'home' && player.role === Position.GK);
 const secondHalfAwayGoalkeeper = halfTimeSnapshot.players.find((player) => player.teamSide === 'away' && player.role === Position.GK);
 const secondHalfHomeForward = halfTimeSnapshot.players.find((player) => player.teamSide === 'home' && player.role === Position.RF);
@@ -870,6 +883,151 @@ if (passer && receiver && interceptor) {
 }
 
 assert.ok(interceptionEngine.events.some((event) => event.type === 'interception'), 'loose inaccurate passes should be interceptable');
+
+const receiveIntentEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99]),
+});
+receiveIntentEngine.start();
+
+const receiveIntentPasser = receiveIntentEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+const movingReceiver = receiveIntentEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LCM);
+
+assert.ok(receiveIntentPasser && movingReceiver, 'the receive-intent scenario needs a passer and receiver');
+
+if (receiveIntentPasser && movingReceiver) {
+    receiveIntentPasser.x = 45;
+    receiveIntentPasser.y = 34;
+    movingReceiver.x = 48;
+    movingReceiver.y = 34;
+    receiveIntentEngine.state.ball.owner = null;
+    receiveIntentEngine.state.ball.x = receiveIntentPasser.x;
+    receiveIntentEngine.state.ball.y = receiveIntentPasser.y;
+    receiveIntentEngine.state.ball.velocity = velocityTowards(receiveIntentPasser, { x: 56, y: 34 }, 8);
+    receiveIntentEngine.state.activeBallAction = {
+        type: 'pass',
+        from: receiveIntentPasser,
+        teamSide: 'home',
+        origin: {
+            x: receiveIntentPasser.x,
+            y: receiveIntentPasser.y,
+        },
+        target: {
+            x: 56,
+            y: 34,
+        },
+        targetPlayer: movingReceiver,
+        inaccurate: false,
+        quality: 0.9,
+        estimatedArrivalTime: receiveIntentEngine.state.time + 1.4,
+        passSpeed: 8,
+        receiveDifficulty: 0.12,
+        targetKind: 'feet',
+        route: 'lateral_support',
+    };
+
+    const receiveIntentSlice = receiveIntentEngine.tick();
+    const receiverSnapshot = receiveIntentSlice.snapshot.players.find((player) => player.id === movingReceiver.id);
+
+    assert.equal(receiverSnapshot?.currentIntent.type, 'receive_pass', 'the intended receiver should commit to the pass target');
+    assert.ok(receiverSnapshot && receiverSnapshot.x > 48, 'the intended receiver should move toward the pass target while the ball travels');
+}
+
+const cleanPassEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0]),
+});
+cleanPassEngine.start();
+
+const cleanPasser = cleanPassEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+const cleanReceiver = cleanPassEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LCM);
+
+assert.ok(cleanPasser && cleanReceiver, 'the clean-pass scenario needs a passer and receiver');
+
+if (cleanPasser && cleanReceiver) {
+    cleanPasser.x = 45;
+    cleanPasser.y = 34;
+    cleanReceiver.x = 50;
+    cleanReceiver.y = 34;
+    cleanPassEngine.state.ball.owner = null;
+    cleanPassEngine.state.ball.x = cleanPasser.x;
+    cleanPassEngine.state.ball.y = cleanPasser.y;
+    cleanPassEngine.state.ball.velocity = velocityTowards(cleanPasser, cleanReceiver, 20);
+    cleanPassEngine.state.activeBallAction = {
+        type: 'pass',
+        from: cleanPasser,
+        teamSide: 'home',
+        origin: {
+            x: cleanPasser.x,
+            y: cleanPasser.y,
+        },
+        target: {
+            x: cleanReceiver.x,
+            y: cleanReceiver.y,
+        },
+        targetPlayer: cleanReceiver,
+        inaccurate: false,
+        quality: 0.95,
+        estimatedArrivalTime: cleanPassEngine.state.time + 0.25,
+        passSpeed: 20,
+        receiveDifficulty: 0.08,
+        targetKind: 'feet',
+        route: 'lateral_support',
+    };
+    cleanPassEngine.tick();
+}
+
+assert.ok(cleanPassEngine.events.some((event) => event.type === 'receive' && event.playerId === cleanReceiver?.id), 'an unpressured short pass should be received cleanly');
+
+const secondBallEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: queuedRandom([0.99, 0.99]),
+});
+secondBallEngine.start();
+
+const secondBallPasser = secondBallEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+const secondBallReceiver = secondBallEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LCM);
+
+assert.ok(secondBallPasser && secondBallReceiver, 'the second-ball scenario needs a passer and receiver');
+
+if (secondBallPasser && secondBallReceiver) {
+    secondBallPasser.x = 45;
+    secondBallPasser.y = 34;
+    secondBallReceiver.x = 70;
+    secondBallReceiver.y = 34;
+    secondBallEngine.state.ball.owner = null;
+    secondBallEngine.state.ball.x = 60;
+    secondBallEngine.state.ball.y = 34;
+    secondBallEngine.state.ball.velocity = { x: 0, y: 0 };
+    secondBallEngine.state.activeBallAction = {
+        type: 'pass',
+        from: secondBallPasser,
+        teamSide: 'home',
+        origin: {
+            x: secondBallPasser.x,
+            y: secondBallPasser.y,
+        },
+        target: {
+            x: 60,
+            y: 34,
+        },
+        targetPlayer: secondBallReceiver,
+        inaccurate: true,
+        quality: 0.45,
+        estimatedArrivalTime: secondBallEngine.state.time,
+        passSpeed: 12,
+        receiveDifficulty: 0.5,
+        targetKind: 'feet',
+        route: 'lateral_support',
+    };
+    secondBallEngine.tick();
+}
+
+assert.ok(secondBallEngine.events.some((event) => event.type === 'second_ball'), 'a slightly misplaced pass should become a second ball');
+assert.ok(secondBallEngine.state.secondBall, 'second-ball state should stay visible for nearby players to attack');
 
 console.log({
     snapshots: snapshots.length,

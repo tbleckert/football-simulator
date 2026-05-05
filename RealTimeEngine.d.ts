@@ -9,8 +9,8 @@ export interface Vector2 {
 export type TeamSide = 'home' | 'away';
 export type Mentality = 'defensive' | 'balanced' | 'attacking';
 export type MatchPhase = 'kickoff' | 'open_play' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'injury_stoppage' | 'substitution' | 'half_time' | 'full_time';
-export type PlayerIntentType = 'hold_shape' | 'press' | 'cover_passing_lane' | 'track_runner' | 'overlap' | 'underlap' | 'attack_box' | 'drop_between_lines' | 'drift_wide' | 'make_forward_run' | 'recover_shape' | 'support_carrier' | 'support' | 'receive' | 'dribble' | 'pass' | 'shoot' | 'recover';
-export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'dribble' | 'challenge' | 'yellow_card' | 'red_card' | 'injury' | 'substitution' | 'advantage' | 'aerial_duel' | 'blocked_shot' | 'goalkeeper_claim' | 'goalkeeper_punch' | 'pass' | 'receive' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
+export type PlayerIntentType = 'hold_shape' | 'press' | 'cover_passing_lane' | 'track_runner' | 'overlap' | 'underlap' | 'attack_box' | 'drop_between_lines' | 'drift_wide' | 'make_forward_run' | 'recover_shape' | 'support_carrier' | 'support' | 'receive' | 'receive_pass' | 'dribble' | 'pass' | 'shoot' | 'recover' | 'attack_second_ball';
+export type RealTimeEventType = 'match_start' | 'kickoff' | 'half_time' | 'full_time' | 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty' | 'dribble' | 'challenge' | 'yellow_card' | 'red_card' | 'injury' | 'substitution' | 'advantage' | 'aerial_duel' | 'blocked_shot' | 'goalkeeper_claim' | 'goalkeeper_punch' | 'pass' | 'receive' | 'second_ball' | 'interception' | 'tackle' | 'shot' | 'save' | 'miss' | 'foul' | 'goal' | 'recovery';
 export interface Tactics {
     formation: string;
     press: number;
@@ -69,14 +69,26 @@ export interface RestartState {
     position: Vector2;
     reason: string;
 }
+export interface SecondBallState {
+    x: number;
+    y: number;
+    expiresAt: number;
+    teamSide: TeamSide;
+    sourcePlayerId: string;
+}
 export interface ActiveBallAction {
     type: 'pass' | 'shot';
     from: SimulatedPlayer;
     teamSide: TeamSide;
+    origin?: Vector2;
     target: Vector2;
     targetPlayer?: SimulatedPlayer;
     inaccurate: boolean;
     quality: number;
+    estimatedArrivalTime?: number;
+    passSpeed?: number;
+    receiveDifficulty?: number;
+    targetKind?: 'feet' | 'space' | 'contest';
     route?: string;
     restartType?: RestartState['phase'];
 }
@@ -96,6 +108,7 @@ export interface MatchState {
         away: number;
     };
     activeBallAction: ActiveBallAction | null;
+    secondBall: SecondBallState | null;
     restart: RestartState | null;
     addedTime: {
         firstHalf: number;
@@ -166,6 +179,12 @@ export interface MatchSnapshot {
         velocity: Vector2;
         ownerId: string | null;
     };
+    activePassTarget: Vector2 | null;
+    secondBall: {
+        x: number;
+        y: number;
+        expiresAt: number;
+    } | null;
     players: MatchSnapshotPlayer[];
     events: RealTimeMatchEvent[];
 }
@@ -228,9 +247,11 @@ export default class RealTimeEngine {
     private updateTacticalTargetPositions;
     private resetPlayersToFormation;
     private decidePlayerIntents;
+    private intentForPassReceiver;
     private intentForBallOwner;
     private dribbleIntent;
     private intentForLooseBall;
+    private intentForSecondBall;
     private intentForTeammateInPossession;
     private intentForOutOfPossession;
     private resolveBallAction;
@@ -254,6 +275,14 @@ export default class RealTimeEngine {
     private penaltySpotFor;
     private detectLooseBallRecovery;
     private detectPassOutcome;
+    private resolveFirstTouch;
+    private firstTouchChance;
+    private createSecondBall;
+    private shouldSecondBallRunOut;
+    private secondBallPoint;
+    private receiveZone;
+    private passTargetZone;
+    private keepOverhitPassInPlayChance;
     private detectGoalkeeperSetPieceAction;
     private detectAerialDuel;
     private detectShotOutcome;
@@ -269,6 +298,11 @@ export default class RealTimeEngine {
     private formationSlots;
     private parseFormation;
     private selectPassTarget;
+    private passTargetPoint;
+    private passTargetKind;
+    private passSpeed;
+    private passMissDistance;
+    private receiveDifficulty;
     private passRoute;
     private shotRoute;
     private selectRestartTaker;
@@ -297,6 +331,7 @@ export default class RealTimeEngine {
     private updateStamina;
     private velocityTowards;
     private moveTowards;
+    private pointTowards;
     private playerById;
     private playersForSide;
     private playersAgainst;
@@ -317,8 +352,10 @@ export default class RealTimeEngine {
     private mentalityShift;
     private randomPoint;
     private ballIsSlow;
+    private ballOutsidePitch;
     private distance;
     private clampPoint;
+    private clampPassTarget;
     private clamp;
     private round;
     private roundTime;

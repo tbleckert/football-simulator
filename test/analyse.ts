@@ -148,10 +148,10 @@ function analyseMatch(seed: number): MatchAnalysis {
     const passes = events.filter((event) => event.type === 'pass');
     const receptions = events.filter((event) => event.type === 'receive');
     const shots = events.filter((event) => event.type === 'shot');
-    const goals = events.filter((event) => event.type === 'goal');
     const possessions = possessionsFromEvents(events);
     const looseSnapshots = snapshots.filter((snapshot) => !snapshot.ball.ownerId);
     const passRestartCount = countPassesEndingInRestarts(events);
+    const goals = finalSnapshot.score.home + finalSnapshot.score.away;
 
     return {
         seed,
@@ -160,7 +160,7 @@ function analyseMatch(seed: number): MatchAnalysis {
         receptions: receptions.length,
         passCompletion: ratio(receptions.length, passes.length),
         shots: shots.length,
-        goals: goals.length,
+        goals,
         averagePossessionPasses: average(possessions.map((possession) => possession.passes)),
         longestPossession: Math.max(0, ...possessions.map((possession) => possession.passes)),
         possessionsWithThreePasses: ratio(possessions.filter((possession) => possession.passes >= 3).length, possessions.length),
@@ -180,7 +180,7 @@ function possessionsFromEvents(events: RealTimeMatchEvent[]): Possession[] {
     let active: Possession | null = null;
 
     for (const event of events) {
-        if (!event.teamSide || event.type === 'match_start' || event.type === 'full_time') {
+        if (!event.teamSide || !possessionEventTypes.has(event.type)) {
             continue;
         }
 
@@ -206,6 +206,22 @@ function possessionsFromEvents(events: RealTimeMatchEvent[]): Possession[] {
 
     return possessions;
 }
+
+const possessionEventTypes = new Set([
+    'kickoff',
+    'throw_in',
+    'corner',
+    'goal_kick',
+    'free_kick',
+    'penalty',
+    'pass',
+    'receive',
+    'interception',
+    'tackle',
+    'recovery',
+    'save',
+    'goalkeeper_claim',
+]);
 
 function countPassesEndingInRestarts(events: RealTimeMatchEvent[]): number {
     return events.reduce((total, event, index) => {
