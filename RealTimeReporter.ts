@@ -202,6 +202,10 @@ export default class RealTimeReporter {
 
     private turningPoints(): RealTimeReportSection[] {
         const events = this.engine.events.filter((event) => {
+            if (event.type === 'penalty' && event.outcome === 'goal') {
+                return false;
+            }
+
             return ['goal', 'penalty', 'red_card', 'substitution', 'tactical_change', 'role_change', 'injury'].includes(event.type);
         });
 

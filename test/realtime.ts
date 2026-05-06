@@ -867,6 +867,7 @@ if (penaltyCarrier && penaltyDefender) {
 
 assert.ok(penaltyEngine.events.some((event) => event.type === 'penalty' && event.outcome === 'penalty_foul'), 'box fouls should award penalties');
 assert.ok(penaltyEngine.events.some((event) => event.type === 'penalty' && event.outcome === 'goal'), 'penalties should execute with goal/save/miss outcomes');
+assert.ok(penaltyEngine.events.some((event) => event.type === 'goal' && event.outcome === 'penalty_goal'), 'scored penalties should emit a regular goal event');
 
 const advantageEngine = new RealTimeEngine(createTeam(true, 'Advantage Home', [
     Position.GK,

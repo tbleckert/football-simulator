@@ -420,9 +420,13 @@ function possessionEntryTotal(
 
 function routeCompletion(events: RealTimeMatchEvent[], route: string): RouteCompletion {
     return {
-        attempted: events.filter((event) => event.type === 'pass' && event.outcome === route).length,
+        attempted: events.filter((event) => event.type === 'pass' && normalizedPassRoute(event.outcome) === route).length,
         completed: events.filter((event) => event.type === 'receive' && event.possession.lastSuccessfulPassRoute === route).length,
     };
+}
+
+function normalizedPassRoute(route: string | undefined): string | undefined {
+    return route?.replace(/_inaccurate$/, '');
 }
 
 function goalRoute(event: RealTimeMatchEvent): string {
@@ -430,7 +434,7 @@ function goalRoute(event: RealTimeMatchEvent): string {
 }
 
 function positionGroup(position: Position | undefined): string {
-    if (!position) {
+    if (position === undefined) {
         return 'unknown';
     }
 

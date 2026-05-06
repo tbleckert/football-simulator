@@ -1070,7 +1070,7 @@ export default class RealTimeEngine {
         }
 
         if (this.state.restart.phase === 'penalty') {
-            return [this.executePenalty()];
+            return this.executePenalty();
         }
 
         this.nextPhaseAfterSnapshot = 'open_play';
@@ -1131,7 +1131,7 @@ export default class RealTimeEngine {
         return this.playRestartPass('free_kick', taker, target, targetPoint, 24, 'indirect_free_kick');
     }
 
-    private executePenalty(): RealTimeMatchEvent {
+    private executePenalty(): RealTimeMatchEvent[] {
         const restart = this.state.restart as RestartState;
         const taker = this.state.ball.owner || this.selectRestartTaker(restart);
         const goalkeeper = this.goalkeeperFor(this.oppositeSide(restart.teamSide));
@@ -1150,23 +1150,27 @@ export default class RealTimeEngine {
 
         if (roll < goalChance) {
             this.state.score[restart.teamSide] += 1;
-            const event = this.createEvent('penalty', taker, goalkeeper || undefined, 'goal', {
+            const penaltyEvent = this.createEvent('penalty', taker, goalkeeper || undefined, 'goal', {
                 chanceQuality: goalChance,
             });
-            event.replayWindow = this.replayWindowForGoal();
+            const goalEvent = this.createEvent('goal', taker, goalkeeper || undefined, 'penalty_goal', {
+                chanceQuality: goalChance,
+            });
+            goalEvent.replayWindow = this.replayWindowForGoal();
             this.resetForKickoff(this.oppositeSide(restart.teamSide));
-            this.state.phase = 'penalty';
+            this.state.phase = 'kickoff';
             this.nextPhaseAfterSnapshot = 'open_play';
+            const kickoffEvent = this.createEvent('kickoff', this.state.ball.owner || undefined);
 
-            return event;
+            return [penaltyEvent, goalEvent, kickoffEvent];
         }
 
         if (roll < goalChance + 0.08) {
             this.state.ball.owner = null;
 
-            return this.createEvent('penalty', taker, goalkeeper || undefined, 'miss', {
+            return [this.createEvent('penalty', taker, goalkeeper || undefined, 'miss', {
                 chanceQuality: goalChance,
-            });
+            })];
         }
 
         if (goalkeeper) {
@@ -1174,9 +1178,9 @@ export default class RealTimeEngine {
             this.registerTouch(goalkeeper);
         }
 
-        return this.createEvent('penalty', taker, goalkeeper || undefined, this.random() < 0.3 ? 'save_rebound' : 'save', {
+        return [this.createEvent('penalty', taker, goalkeeper || undefined, this.random() < 0.3 ? 'save_rebound' : 'save', {
             chanceQuality: goalChance,
-        });
+        })];
     }
 
     private playRestartPass(

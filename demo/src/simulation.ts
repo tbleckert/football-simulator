@@ -453,9 +453,13 @@ function possessionEntryTotal(
 
 function routeCompletion(events: RealTimeMatchEvent[], route: string): RouteCompletion {
     return {
-        attempted: events.filter((event) => event.type === 'pass' && event.outcome === route).length,
+        attempted: events.filter((event) => event.type === 'pass' && normalizedPassRoute(event.outcome) === route).length,
         completed: events.filter((event) => event.type === 'receive' && event.possession.lastSuccessfulPassRoute === route).length,
     };
+}
+
+function normalizedPassRoute(route: string | undefined): string | undefined {
+    return route?.replace(/_inaccurate$/, '');
 }
 
 function possessionsFromEvents(events: RealTimeMatchEvent[]): { side: TeamSide, passes: number }[] {

@@ -136,7 +136,7 @@
 
     function filterEvents(source: RealTimeMatchEvent[], filter: string): RealTimeMatchEvent[] {
         if (filter === 'goals') {
-            return source.filter((event) => event.type === 'goal' || event.type === 'penalty');
+            return source.filter((event) => event.type === 'goal');
         }
 
         if (filter === 'passes') {
