@@ -1,6 +1,6 @@
 {
   "name": "@bleckert/football-simulator",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A TypeScript football match simulator for football manager games.",
   "type": "module",
   "main": "./dist/index.js",
