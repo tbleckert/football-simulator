@@ -47,9 +47,11 @@ Avoid storing raw class instances directly. `RealTimeMatchEvent` contains `Team`
 ## Running a Match
 
 ```ts
-import RealTimeEngine from '$simulator/RealTimeEngine';
-import RealTimeReporter from '$simulator/RealTimeReporter';
-import Team from '$simulator/Team';
+import {
+    RealTimeEngine,
+    RealTimeReporter,
+    Team,
+} from '@bleckert/football-simulator';
 
 const homeTeam = new Team(true, 'Northbridge FC', homePlayers);
 const awayTeam = new Team(false, 'Eastport United', awayPlayers);
@@ -153,7 +155,7 @@ const tactics = {
 The real-time engine does not force one commentary style. It returns structured events, and your game can translate those events into the tone you want.
 
 ```ts
-import type { RealTimeMatchEvent } from '$simulator/RealTimeEngine';
+import type { RealTimeMatchEvent } from '@bleckert/football-simulator';
 
 function eventToText(event: RealTimeMatchEvent): string | null {
     const minute = Math.max(1, Math.ceil(event.time / 60));
@@ -231,7 +233,7 @@ engine.simulate(90 * 60);
 You can also change one player's role. Use the simulated player id from `engine.state.players` or from the latest snapshot.
 
 ```ts
-import { Position } from '$simulator/enums/Position';
+import { Position } from '@bleckert/football-simulator';
 
 const player = engine.state.players.find((candidate) => {
     return candidate.side === 'home' && candidate.player.info.number === 8;
@@ -280,7 +282,7 @@ const goalReplays = engine.events
 Project simulator events into plain data before saving.
 
 ```ts
-import type { RealTimeMatchEvent } from '$simulator/RealTimeEngine';
+import type { RealTimeMatchEvent } from '@bleckert/football-simulator';
 
 function toStoredEvent(event: RealTimeMatchEvent) {
     return {

@@ -5,8 +5,11 @@ This reference covers the public classes that are useful for a web or text based
 ## Player
 
 ```ts
-import Player, { type PlayerAttributes } from '$simulator/Player';
-import { Position } from '$simulator/enums/Position';
+import {
+    Player,
+    Position,
+    type PlayerAttributes,
+} from '@bleckert/football-simulator';
 
 const player = new Player(
     { name: 'Alex Striker', number: 9 },
@@ -40,7 +43,7 @@ Useful methods:
 ## Position
 
 ```ts
-import { Position } from '$simulator/enums/Position';
+import { Position } from '@bleckert/football-simulator';
 ```
 
 Available positions:
@@ -76,7 +79,7 @@ Position.ST
 ## Team
 
 ```ts
-import Team from '$simulator/Team';
+import { Team } from '@bleckert/football-simulator';
 
 const team = new Team(true, 'Northbridge FC', players);
 ```
@@ -106,7 +109,7 @@ Useful methods:
 ## RealTimeEngine
 
 ```ts
-import RealTimeEngine from '$simulator/RealTimeEngine';
+import { RealTimeEngine } from '@bleckert/football-simulator';
 
 const engine = new RealTimeEngine(homeTeam, awayTeam, options);
 ```
@@ -271,7 +274,7 @@ Event types:
 ## RealTimeReporter
 
 ```ts
-import RealTimeReporter from '$simulator/RealTimeReporter';
+import { RealTimeReporter } from '@bleckert/football-simulator';
 
 const report = new RealTimeReporter(engine).getReport();
 ```
@@ -292,7 +295,7 @@ Report fields:
 ## SeasonSimulator
 
 ```ts
-import SeasonSimulator from '$simulator/SeasonSimulator';
+import { SeasonSimulator } from '@bleckert/football-simulator';
 
 const simulator = new SeasonSimulator(teams, {
     rounds: 2,
@@ -337,4 +340,3 @@ Season report fields:
 ## Legacy Engine
 
 The older `Engine`, `Game`, `Commentator`, and `Reporter` classes simulate a simpler event flow. Prefer `RealTimeEngine` for new manager game features because it exposes richer tactical state, modern event types, snapshots, and reporting.
-

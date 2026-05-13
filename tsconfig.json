@@ -1,18 +1,27 @@
 {
   "compilerOptions": {
-    "target": "ESNEXT",
-    "module": "es2020",
-    "moduleResolution": "node",
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "strict": true,
     "esModuleInterop": true,
-    "declaration": true,
     "verbatimModuleSyntax": true
   },
+  "include": [
+    "*.ts",
+    "enums/**/*.ts",
+    "lib/**/*.ts",
+    "types/**/*.ts"
+  ],
   "exclude": [
+    "**/*.d.ts",
     "data",
+    "dist",
+    "dist-demo",
     "demo",
     "test",
     "node_modules",
-    "vite.config.ts"
+    "vite.config.ts",
+    "vite.library.config.ts"
   ]
 }

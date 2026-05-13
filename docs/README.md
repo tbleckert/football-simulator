@@ -24,13 +24,14 @@ The older `Engine`, `Game`, `Commentator`, and `Reporter` classes still exist fo
 
 ## Import Paths
 
-The demo app imports simulator modules through the `$simulator` alias configured in `vite.config.ts`.
+The published package exposes a root API.
 
 ```ts
-import RealTimeEngine from '$simulator/RealTimeEngine';
-import Player from '$simulator/Player';
-import Team from '$simulator/Team';
+import {
+    Player,
+    RealTimeEngine,
+    Team,
+} from '@bleckert/football-simulator';
 ```
 
-In your own app, point an alias at the simulator root or expose the files through your package/build setup. The examples in these docs use `$simulator/...` to match the demo.
-
+The local demo app still imports simulator modules through the `$simulator` alias configured in `vite.config.ts`, but game integrations should prefer the package root import.

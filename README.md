@@ -14,7 +14,7 @@ A football (soccer) simulator written in Typescript.
 `RealTimeEngine` is an agent-based simulation loop that advances the match in 0.25 second slices by default. Each slice updates tactical target positions, decides player intents, resolves a ball action, moves players and the ball, then detects match events.
 
 ```ts
-import RealTimeEngine from './RealTimeEngine';
+import { RealTimeEngine } from '@bleckert/football-simulator';
 
 const engine = new RealTimeEngine(homeTeam, awayTeam, {
   homeTactics: {

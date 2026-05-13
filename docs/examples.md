@@ -1,6 +1,6 @@
 # Usage Examples
 
-These examples use the `$simulator` alias from the demo app. Replace it with your own alias or package import path.
+These examples use the published package root import.
 
 ## Seeded Random
 
@@ -23,8 +23,11 @@ export function seededRandom(seed: number): () => number {
 The simulator expects a complete `PlayerAttributes` object. Keep a complete baseline and merge saved player attributes into it.
 
 ```ts
-import Player, { type PlayerAttributes } from '$simulator/Player';
-import { Position } from '$simulator/enums/Position';
+import {
+    Player,
+    Position,
+    type PlayerAttributes,
+} from '@bleckert/football-simulator';
 
 const defaultAttributes: PlayerAttributes = {
     aggression: 12,
@@ -108,7 +111,7 @@ function toSimulatorPlayer(player: GamePlayer): Player {
 Order matters. The first 11 players become starters. The next five become substitutes.
 
 ```ts
-import Team from '$simulator/Team';
+import { Team } from '@bleckert/football-simulator';
 
 function toSimulatorTeam(home: boolean, name: string, selectedPlayers: GamePlayer[]): Team {
     return new Team(
@@ -122,8 +125,10 @@ function toSimulatorTeam(home: boolean, name: string, selectedPlayers: GamePlaye
 ## Simulate a Finished Match
 
 ```ts
-import RealTimeEngine from '$simulator/RealTimeEngine';
-import RealTimeReporter from '$simulator/RealTimeReporter';
+import {
+    RealTimeEngine,
+    RealTimeReporter,
+} from '@bleckert/football-simulator';
 
 const homeTeam = toSimulatorTeam(true, 'Northbridge FC', homeSelection);
 const awayTeam = toSimulatorTeam(false, 'Eastport United', awaySelection);
@@ -163,7 +168,7 @@ const result = {
 ## Create a Text Match Feed
 
 ```ts
-import type { RealTimeMatchEvent } from '$simulator/RealTimeEngine';
+import type { RealTimeMatchEvent } from '@bleckert/football-simulator';
 
 function matchMinute(time: number): number {
     return Math.max(1, Math.ceil(time / 60));
@@ -218,7 +223,7 @@ const feed = engine.events
 Use `tick()` when your match screen needs manager interaction.
 
 ```ts
-import { Position } from '$simulator/enums/Position';
+import { Position } from '@bleckert/football-simulator';
 
 engine.start();
 
@@ -251,7 +256,7 @@ engine.simulate(90 * 60);
 ## Store Compact Events
 
 ```ts
-import type { RealTimeMatchEvent } from '$simulator/RealTimeEngine';
+import type { RealTimeMatchEvent } from '@bleckert/football-simulator';
 
 function toStoredEvent(event: RealTimeMatchEvent) {
     return {
@@ -277,7 +282,10 @@ function toStoredEvent(event: RealTimeMatchEvent) {
 ## Run a Small Season
 
 ```ts
-import SeasonSimulator, { type SeasonTeamInput } from '$simulator/SeasonSimulator';
+import {
+    SeasonSimulator,
+    type SeasonTeamInput,
+} from '@bleckert/football-simulator';
 
 const teams: SeasonTeamInput[] = clubs.map((club) => ({
     name: club.name,
@@ -297,4 +305,3 @@ console.log(season.metrics.goalsPerMatch);
 ```
 
 `SeasonSimulator` is useful for tests, balancing, previews, and background leagues. In a persistent manager game, you may still prefer to simulate fixtures one by one so you can apply injuries, suspensions, morale, fatigue, and transfers between match days.
-
