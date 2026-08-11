@@ -262,6 +262,10 @@ export interface MatchState {
         home: number;
         away: number;
     };
+    substitutionOpportunitiesUsed: {
+        home: number;
+        away: number;
+    };
 }
 
 export interface RealTimeMatchEvent {
@@ -445,6 +449,10 @@ const defaultReferee: RefereeProfile = {
     bookingThreshold: 55,
 };
 
+const maximumNamedSubstitutes = 15;
+const maximumSubstitutions = 5;
+const maximumSubstitutionOpportunities = 3;
+
 const pitch = {
     length: 105,
     width: 68,
@@ -522,6 +530,10 @@ export default class RealTimeEngine {
                 away: this.createBenchPlayers(awayTeam, 'away', awayTactics),
             },
             substitutionsUsed: {
+                home: 0,
+                away: 0,
+            },
+            substitutionOpportunitiesUsed: {
                 home: 0,
                 away: 0,
             },
@@ -644,7 +656,7 @@ export default class RealTimeEngine {
 
         this.movePlayersAndBall();
         events.push(...this.detectEvents());
-        if (this.state.phase === 'open_play') {
+        if (this.state.phase === 'open_play' && !events.some((event) => event.type === 'substitution')) {
             events.push(...this.detectSubstitutionEvents());
         }
 
@@ -890,7 +902,7 @@ export default class RealTimeEngine {
     }
 
     private createBenchPlayers(team: Team, side: TeamSide, tactics: Tactics): SimulatedPlayer[] {
-        const benchPlayers = team.players.slice(11, 16);
+        const benchPlayers = team.players.slice(11, 11 + maximumNamedSubstitutes);
         const players = benchPlayers.length ? benchPlayers : this.generateBenchPlayers(team);
 
         return this.createPlayers(team, side, tactics, players, 'bench');
@@ -2105,9 +2117,12 @@ export default class RealTimeEngine {
         ];
 
         if (severity === 'forced') {
-            const substitution = this.performSubstitution(player, 'forced_injury', false);
+            const substitution = this.canStartSubstitutionOpportunity(player.side)
+                ? this.performSubstitution(player, 'forced_injury')
+                : null;
 
             if (substitution) {
+                this.state.substitutionOpportunitiesUsed[player.side] += 1;
                 events.push(substitution);
             }
         }
@@ -2145,28 +2160,58 @@ export default class RealTimeEngine {
     }
 
     private detectSubstitutionEvents(): RealTimeMatchEvent[] {
+        const events: RealTimeMatchEvent[] = [];
+
         for (const side of ['home', 'away'] as TeamSide[]) {
-            if (this.state.substitutionsUsed[side] >= 5 || !this.state.bench[side].length) {
+            if (!this.canStartSubstitutionOpportunity(side)) {
                 continue;
             }
 
-            const candidate = this.substitutionCandidate(side);
+            const eligiblePlayers = this.playersForSide(side);
+            const substitutions: RealTimeMatchEvent[] = [];
 
-            if (!candidate) {
+            while (this.state.substitutionsUsed[side] < maximumSubstitutions && this.state.bench[side].length) {
+                const candidate = this.substitutionCandidate(side, eligiblePlayers);
+
+                if (!candidate) {
+                    break;
+                }
+
+                eligiblePlayers.splice(eligiblePlayers.indexOf(candidate.player), 1);
+
+                const substitution = this.performSubstitution(candidate.player, candidate.reason);
+
+                if (!substitution) {
+                    break;
+                }
+
+                substitutions.push(substitution);
+            }
+
+            if (!substitutions.length) {
                 continue;
             }
 
-            const substitution = this.performSubstitution(candidate.player, candidate.reason, true);
-
-            return substitution ? [substitution] : [];
+            this.state.substitutionOpportunitiesUsed[side] += 1;
+            events.push(...substitutions);
         }
 
-        return [];
+        if (events.length) {
+            this.state.phase = 'substitution';
+            this.nextPhaseAfterSnapshot = 'open_play';
+        }
+
+        return events;
     }
 
-    private substitutionCandidate(side: TeamSide): { player: SimulatedPlayer, reason: string } | null {
+    private canStartSubstitutionOpportunity(side: TeamSide): boolean {
+        return this.state.substitutionsUsed[side] < maximumSubstitutions
+            && this.state.substitutionOpportunitiesUsed[side] < maximumSubstitutionOpportunities
+            && this.state.bench[side].length > 0;
+    }
+
+    private substitutionCandidate(side: TeamSide, players: SimulatedPlayer[]): { player: SimulatedPlayer, reason: string } | null {
         const minute = this.state.time / 60;
-        const players = this.playersForSide(side);
         const forcedInjury = players.find((player) => player.injurySeverity === 'forced');
 
         if (forcedInjury) {
@@ -2200,7 +2245,7 @@ export default class RealTimeEngine {
 
         const score = this.state.score[side] - this.state.score[this.oppositeSide(side)];
         const quietForward = players
-            .filter((player) => minute >= 70 && score < 0 && attackPositions.includes(player.role))
+            .filter((player) => minute >= 70 && score < 0 && player.stamina < 70 && attackPositions.includes(player.role))
             .sort((a, b) => a.stamina - b.stamina)[0];
 
         if (quietForward) {
@@ -2216,12 +2261,11 @@ export default class RealTimeEngine {
     private performSubstitution(
         outgoing: SimulatedPlayer,
         reason: string,
-        setPhase: boolean,
     ): RealTimeMatchEvent | null {
         const bench = this.state.bench[outgoing.side];
         const replacement = this.selectSubstituteFor(outgoing);
 
-        if (!replacement || this.state.substitutionsUsed[outgoing.side] >= 5) {
+        if (!replacement || this.state.substitutionsUsed[outgoing.side] >= maximumSubstitutions) {
             return null;
         }
 
@@ -2253,11 +2297,6 @@ export default class RealTimeEngine {
             this.registerTouch(replacement);
         }
 
-        if (setPhase) {
-            this.state.phase = 'substitution';
-            this.nextPhaseAfterSnapshot = 'open_play';
-        }
-
         return this.createEvent('substitution', replacement, outgoing, reason);
     }
 
@@ -2266,6 +2305,10 @@ export default class RealTimeEngine {
         const roleScore = (player: SimulatedPlayer): number => {
             if (player.role === outgoing.role) {
                 return 0;
+            }
+
+            if (player.role === Position.GK && outgoing.role !== Position.GK) {
+                return 50;
             }
 
             if (outgoing.role === Position.GK) {

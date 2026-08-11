@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { Position } from '../enums/Position';
+import { attackPositions, Position } from '../enums/Position';
 import Player from '../Player';
 import RealTimeEngine from '../RealTimeEngine';
 import RealTimeReporter from '../RealTimeReporter';
@@ -1028,6 +1028,7 @@ if (injuredCarrier && injuryDefender) {
 assert.ok(injuryEngine.events.some((event) => event.type === 'injury' && event.outcome === 'forced'), 'heavy challenges should be able to force an injury');
 assert.ok(injuryEngine.events.some((event) => event.type === 'substitution' && event.outcome === 'forced_injury'), 'forced injuries should trigger a substitution when a bench player is available');
 assert.equal(injuryEngine.state.players.length, 22, 'injury substitutions should preserve the number of players on the pitch');
+assert.equal(injuryEngine.state.substitutionOpportunitiesUsed.home + injuryEngine.state.substitutionOpportunitiesUsed.away, 1, 'a forced-injury replacement should use one substitution opportunity');
 
 const substitutionEngine = new RealTimeEngine(homeTeam, awayTeam, {
     matchLengthSeconds: 90 * 60,
@@ -1049,6 +1050,147 @@ if (exhaustedPlayer) {
     assert.equal(substitutionSlice.snapshot.phase, 'substitution', 'planned substitutions should expose the substitution phase');
     assert.equal(substitutionEngine.state.phase, 'open_play', 'substitution stoppages should return to open play');
 }
+
+const fullSquadPositions = [
+    Position.GK,
+    Position.LB,
+    Position.LCB,
+    Position.RCB,
+    Position.RB,
+    Position.LM,
+    Position.LCM,
+    Position.RCM,
+    Position.RM,
+    Position.LF,
+    Position.RF,
+    Position.GK,
+    Position.LB,
+    Position.CB,
+    Position.RB,
+    Position.LM,
+    Position.CM,
+    Position.RM,
+    Position.LW,
+    Position.ST,
+    Position.RW,
+    Position.CF,
+];
+const fullSquadEngine = new RealTimeEngine(
+    createTeam(true, 'Full Squad Home', fullSquadPositions),
+    createTeam(false, 'Full Squad Away', fullSquadPositions),
+    { random: () => 0.99 },
+);
+
+assert.equal(fullSquadEngine.state.bench.home.length, 11, 'all supplied named substitutes should be available up to the competition limit');
+
+const oversizedSquadEngine = new RealTimeEngine(
+    createTeam(true, 'Oversized Squad Home', [...fullSquadPositions, Position.GK, Position.CB, Position.CM, Position.RM, Position.ST]),
+    createTeam(false, 'Oversized Squad Away', fullSquadPositions),
+);
+
+assert.equal(oversizedSquadEngine.state.bench.home.length, 15, 'the named bench should be capped at fifteen players');
+
+fullSquadEngine.start();
+fullSquadEngine.state.period = 2;
+fullSquadEngine.state.phase = 'open_play';
+fullSquadEngine.state.time = 65 * 60;
+
+const tiredMidfielders = fullSquadEngine.state.players
+    .filter((player) => [Position.LCM, Position.RCM].includes(player.role));
+
+tiredMidfielders.forEach((player) => {
+    player.stamina = 20;
+});
+
+const batchSubstitutionSlice = fullSquadEngine.tick();
+const batchSubstitutions = batchSubstitutionSlice.events.filter((event) => event.type === 'substitution');
+
+assert.equal(batchSubstitutions.filter((event) => event.teamSide === 'home').length, 2, 'multiple eligible home replacements should share one substitution opportunity');
+assert.equal(batchSubstitutions.filter((event) => event.teamSide === 'away').length, 2, 'both teams should be able to make changes at the same stoppage');
+assert.equal(fullSquadEngine.state.substitutionOpportunitiesUsed.home, 1, 'a home batch should count as one substitution opportunity');
+assert.equal(fullSquadEngine.state.substitutionOpportunitiesUsed.away, 1, 'an away batch should count as one substitution opportunity');
+
+const opportunityEngine = new RealTimeEngine(
+    createTeam(true, 'Opportunity Home', fullSquadPositions),
+    createTeam(false, 'Opportunity Away', fullSquadPositions),
+    { random: () => 0.99 },
+);
+opportunityEngine.start();
+opportunityEngine.state.period = 2;
+opportunityEngine.state.phase = 'open_play';
+
+const opportunityStarters = opportunityEngine.state.players
+    .filter((player) => player.side === 'home' && player.role !== Position.GK)
+    .slice(0, 6);
+const opportunityGroups = [
+    opportunityStarters.slice(0, 2),
+    opportunityStarters.slice(2, 4),
+    opportunityStarters.slice(4, 5),
+    opportunityStarters.slice(5, 6),
+];
+
+opportunityGroups.forEach((players, index) => {
+    players.forEach((player) => {
+        player.stamina = 20;
+    });
+    opportunityEngine.state.time = (60 + index * 5) * 60;
+    opportunityEngine.state.phase = 'open_play';
+    opportunityEngine.tick();
+});
+
+const opportunitySubstitutions = opportunityEngine.events.filter((event) => event.type === 'substitution' && event.teamSide === 'home');
+const opportunityTimes = new Set(opportunitySubstitutions.map((event) => event.time));
+
+assert.equal(opportunitySubstitutions.length, 5, 'a team should be able to use five replacements across its available opportunities');
+assert.equal(opportunityTimes.size, 3, 'five replacements should use no more than three substitution opportunities');
+assert.equal(opportunityEngine.state.substitutionOpportunitiesUsed.home, 3, 'a team should be limited to three substitution opportunities');
+
+const positionChoiceEngine = new RealTimeEngine(
+    createTeam(true, 'Position Choice Home', [
+        ...homeTeam.players.map((player) => player.position),
+        Position.GK,
+        Position.CM,
+    ]),
+    awayTeam,
+    { random: () => 0.99 },
+);
+positionChoiceEngine.start();
+positionChoiceEngine.state.period = 2;
+positionChoiceEngine.state.phase = 'open_play';
+positionChoiceEngine.state.time = 65 * 60;
+
+const tiredForward = positionChoiceEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+
+assert.ok(tiredForward, 'the position-choice scenario needs a tiring forward');
+
+if (tiredForward) {
+    tiredForward.stamina = 20;
+    const positionChoiceSlice = positionChoiceEngine.tick();
+    const positionChoiceSubstitution = positionChoiceSlice.events.find((event) => event.type === 'substitution');
+
+    assert.equal(positionChoiceSubstitution?.player?.position, Position.CM, 'an outfield replacement should be preferred over a reserve goalkeeper');
+}
+
+const chasingGoalEngine = new RealTimeEngine(homeTeam, awayTeam, { random: () => 0.99 });
+chasingGoalEngine.start();
+chasingGoalEngine.state.period = 2;
+chasingGoalEngine.state.phase = 'open_play';
+chasingGoalEngine.state.time = 70 * 60;
+chasingGoalEngine.state.score.home = 0;
+chasingGoalEngine.state.score.away = 1;
+
+const chasingGoalForwards = chasingGoalEngine.state.players
+    .filter((player) => player.side === 'home' && attackPositions.includes(player.role));
+
+chasingGoalForwards.forEach((player, index) => {
+    player.stamina = index === 0 ? 60 : 100;
+});
+
+const firstChasingGoalSlice = chasingGoalEngine.tick();
+const secondChasingGoalSlice = chasingGoalEngine.tick();
+
+assert.equal(firstChasingGoalSlice.events.filter((event) => event.type === 'substitution').length, 1, 'a tiring forward should be replaced when chasing a goal');
+assert.equal(secondChasingGoalSlice.events.some((event) => event.type === 'substitution'), false, 'a fresh replacement should not trigger an immediate substitution cascade');
 
 const tackleEngine = new RealTimeEngine(createTeam(true, 'Tackle Home', [
     Position.GK,

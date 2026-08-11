@@ -92,7 +92,7 @@ Constructor arguments:
 | `name` | Team display name. |
 | `players` | Ordered list of `Player` instances. |
 
-For `RealTimeEngine`, the first 11 players are starters and players 12 to 16 are substitutes. If the bench is missing, the engine generates fallback substitutes.
+For `RealTimeEngine`, the first 11 players are starters and the next 15 players, at most, are named substitutes. If no bench is supplied, the engine generates five fallback substitutes. Automatic changes use no more than five players across three substitution opportunities; multiple changes in one stoppage count as one opportunity.
 
 Useful methods:
 

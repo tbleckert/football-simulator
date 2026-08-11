@@ -1,7 +1,7 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
-    import { Position } from '$simulator/enums/Position';
-    import type { MatchSnapshot } from '$simulator/RealTimeEngine';
+    import { Position } from '$simulator/enums/Position.ts';
+    import type { MatchSnapshot } from '$simulator/RealTimeEngine.ts';
 
     export let snapshot: MatchSnapshot;
     export let selectedPlayerId = '';

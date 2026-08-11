@@ -9,6 +9,9 @@ export default defineConfig({
             tsconfigPath: './tsconfig.json',
         }),
     ],
+    resolve: {
+        extensions: ['.ts', '.mts', '.mjs', '.js', '.jsx', '.tsx', '.json'],
+    },
     build: {
         lib: {
             entry: fileURLToPath(new URL('./index.ts', import.meta.url)),

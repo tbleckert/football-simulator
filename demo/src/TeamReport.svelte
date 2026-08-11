@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { Position } from '$simulator/enums/Position';
-    import type Team from '$simulator/Team';
+    import { Position } from '$simulator/enums/Position.ts';
+    import type Team from '$simulator/Team.ts';
     import type { TeamStats } from './simulation';
 
     export let team: Team;
@@ -76,7 +76,10 @@
             </tr>
         </thead>
         <tbody>
-            {#each team.players as player}
+            <tr class="players__group">
+                <th colspan="3">Starting XI</th>
+            </tr>
+            {#each team.players.slice(0, 11) as player}
                 <tr>
                     <td>{player.info.number}</td>
                     <td>{player.info.name}</td>
@@ -84,5 +87,19 @@
                 </tr>
             {/each}
         </tbody>
+        {#if team.players.length > 11}
+            <tbody>
+                <tr class="players__group">
+                    <th colspan="3">Substitutes</th>
+                </tr>
+                {#each team.players.slice(11) as player}
+                    <tr>
+                        <td>{player.info.number}</td>
+                        <td>{player.info.name}</td>
+                        <td>{Position[player.position]}</td>
+                    </tr>
+                {/each}
+            </tbody>
+        {/if}
     </table>
 </section>

@@ -108,7 +108,7 @@ function toSimulatorPlayer(player: GamePlayer): Player {
 
 ## Build a Match-Day Team
 
-Order matters. The first 11 players become starters. The next five become substitutes.
+Order matters. The first 11 players become starters. The remaining players, up to 15, become named substitutes. The engine may use no more than five of them across three substitution opportunities.
 
 ```ts
 import { Team } from '@bleckert/football-simulator';

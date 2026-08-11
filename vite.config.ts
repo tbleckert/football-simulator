@@ -19,6 +19,7 @@ export default defineConfig({
             $simulator: projectRoot,
             $demo: fileURLToPath(new URL('./demo/src', import.meta.url)),
         },
+        extensions: ['.ts', '.mts', '.mjs', '.js', '.jsx', '.tsx', '.json'],
     },
     build: {
         outDir: '../dist-demo',

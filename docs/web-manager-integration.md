@@ -91,8 +91,12 @@ console.log(report.headline);
 `RealTimeEngine` uses:
 
 - the first 11 players in `team.players` as starters
-- players 12 to 16 as the bench
-- generated fallback bench players if fewer than five substitutes are supplied
+- the next 15 players, at most, as named substitutes
+- five generated fallback substitutes if no bench is supplied
+
+Automatic changes use no more than five players across three substitution opportunities. When several players meet the replacement criteria during the same stoppage, those changes are grouped into one opportunity.
+
+These defaults follow [IFAB Law 3](https://www.theifab.com/laws/latest/the-players/) for top-division official competitions using five substitutes. Competition rules determine the named bench size, from three to 15 substitutes.
 
 For a manager game, pass the selected line-up in match order:
 
@@ -114,6 +118,7 @@ const matchDayPlayers = [
     substituteMidfielder,
     substituteWinger,
     substituteForward,
+    // Additional named substitutes may follow, up to 15 in total.
 ];
 
 const team = new Team(true, 'Northbridge FC', matchDayPlayers);

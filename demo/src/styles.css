@@ -419,8 +419,11 @@ main {
 }
 
 .match-report dd {
+    overflow: hidden;
     font-size: 1.15rem;
     font-weight: 900;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .match-report table {
@@ -700,6 +703,13 @@ table {
 .players th:last-child,
 .players td:last-child {
     text-align: right;
+}
+
+.players .players__group th {
+    padding-top: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--subtle-color);
+    text-align: left;
 }
 
 .players td:first-child {

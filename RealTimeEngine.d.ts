@@ -152,6 +152,10 @@ export interface MatchState {
         home: number;
         away: number;
     };
+    substitutionOpportunitiesUsed: {
+        home: number;
+        away: number;
+    };
 }
 export interface RealTimeMatchEvent {
     type: RealTimeEventType;
@@ -325,6 +329,7 @@ export default class RealTimeEngine {
     private prepareFoulRestart;
     private applyRedCard;
     private detectSubstitutionEvents;
+    private canStartSubstitutionOpportunity;
     private substitutionCandidate;
     private performSubstitution;
     private selectSubstituteFor;

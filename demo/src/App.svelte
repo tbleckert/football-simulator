@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import type { MatchSnapshot, RealTimeMatchEvent } from '$simulator/RealTimeEngine';
-    import RealTimeReporter from '$simulator/RealTimeReporter';
+    import type { MatchSnapshot, RealTimeMatchEvent } from '$simulator/RealTimeEngine.ts';
+    import RealTimeReporter from '$simulator/RealTimeReporter.ts';
     import Pitch from './Pitch.svelte';
     import TeamReport from './TeamReport.svelte';
     import {
@@ -100,8 +100,16 @@
     });
 
     function eventLabel(event: RealTimeMatchEvent): string {
-        const player = event.player?.info.name || event.teamSide || 'Match';
         const outcome = event.outcome ? ` · ${event.outcome.replace(/_/g, ' ')}` : '';
+
+        if (event.type === 'substitution') {
+            const outgoing = event.secondaryPlayer?.info.name || 'Player';
+            const incoming = event.player?.info.name || 'Substitute';
+
+            return `substitution ${outgoing} → ${incoming}${outcome}`;
+        }
+
+        const player = event.player?.info.name || event.teamSide || 'Match';
 
         return `${event.type.replace(/_/g, ' ')} ${player}${outcome}`;
     }
@@ -489,44 +497,50 @@
         </section>
     {/if}
 
-    {#if selectedPlayer}
-        <section class="inspector" aria-label="Selected player">
+    <section class="inspector" aria-label="Selected player">
+        <div>
+            <strong>{selectedPlayer?.playerName || 'Loose ball'}</strong>
+            <span>
+                {selectedPlayer
+                    ? `${selectedPlayer.teamSide.toUpperCase()} #${selectedPlayer.playerNumber} ${selectedPlayer.roleName}`
+                    : 'No player in possession'}
+            </span>
+        </div>
+        <dl>
             <div>
-                <strong>{selectedPlayer.playerName}</strong>
-                <span>{selectedPlayer.teamSide.toUpperCase()} #{selectedPlayer.playerNumber} {selectedPlayer.roleName}</span>
+                <dt>Intent</dt>
+                <dd>{selectedPlayer ? selectedPlayer.currentIntent.type.replace(/_/g, ' ') : '—'}</dd>
             </div>
-            <dl>
-                <div>
-                    <dt>Intent</dt>
-                    <dd>{selectedPlayer.currentIntent.type.replace(/_/g, ' ')}</dd>
-                </div>
-                <div>
-                    <dt>Target</dt>
-                    <dd>{Math.round(selectedPlayer.target.x)}, {Math.round(selectedPlayer.target.y)}</dd>
-                </div>
-                <div>
-                    <dt>Intent target</dt>
-                    <dd>{Math.round(selectedPlayer.currentIntent.target.x)}, {Math.round(selectedPlayer.currentIntent.target.y)}</dd>
-                </div>
-                <div>
-                    <dt>Stamina</dt>
-                    <dd>{Math.round(selectedPlayer.stamina)}%</dd>
-                </div>
-                <div>
-                    <dt>Cards</dt>
-                    <dd>{selectedPlayer.yellowCards}{selectedPlayer.redCard ? 'R' : ''}</dd>
-                </div>
-                <div>
-                    <dt>Fouls</dt>
-                    <dd>{selectedPlayer.foulsCommitted}/{selectedPlayer.foulsSuffered}</dd>
-                </div>
-                <div>
-                    <dt>Injury</dt>
-                    <dd>{selectedPlayer.injurySeverity}</dd>
-                </div>
-            </dl>
-        </section>
-    {/if}
+            <div>
+                <dt>Target</dt>
+                <dd>{selectedPlayer ? `${Math.round(selectedPlayer.target.x)}, ${Math.round(selectedPlayer.target.y)}` : '—'}</dd>
+            </div>
+            <div>
+                <dt>Intent target</dt>
+                <dd>
+                    {selectedPlayer
+                        ? `${Math.round(selectedPlayer.currentIntent.target.x)}, ${Math.round(selectedPlayer.currentIntent.target.y)}`
+                        : '—'}
+                </dd>
+            </div>
+            <div>
+                <dt>Stamina</dt>
+                <dd>{selectedPlayer ? `${Math.round(selectedPlayer.stamina)}%` : '—'}</dd>
+            </div>
+            <div>
+                <dt>Cards</dt>
+                <dd>{selectedPlayer ? `${selectedPlayer.yellowCards}${selectedPlayer.redCard ? 'R' : ''}` : '—'}</dd>
+            </div>
+            <div>
+                <dt>Fouls</dt>
+                <dd>{selectedPlayer ? `${selectedPlayer.foulsCommitted}/${selectedPlayer.foulsSuffered}` : '—'}</dd>
+            </div>
+            <div>
+                <dt>Injury</dt>
+                <dd>{selectedPlayer?.injurySeverity || '—'}</dd>
+            </div>
+        </dl>
+    </section>
 
     <section class="events" aria-label="Recent events">
         <h2>Recent events</h2>

@@ -1,11 +1,11 @@
-import Player, { type PlayerAttributes } from '$simulator/Player';
+import Player, { type PlayerAttributes } from '$simulator/Player.ts';
 import RealTimeEngine, {
     type MatchSnapshot,
     type RealTimeMatchEvent,
     type TeamSide,
-} from '$simulator/RealTimeEngine';
-import Team from '$simulator/Team';
-import { Position } from '$simulator/enums/Position';
+} from '$simulator/RealTimeEngine.ts';
+import Team from '$simulator/Team.ts';
+import { Position } from '$simulator/enums/Position.ts';
 
 export interface TeamStats {
     possession: number;
@@ -62,64 +62,65 @@ export interface Simulation {
     events: RealTimeMatchEvent[];
 }
 
-const homePositions = [
-    Position.GK,
-    Position.LB,
-    Position.LCB,
-    Position.RCB,
-    Position.RB,
-    Position.LM,
-    Position.LCM,
-    Position.RCM,
-    Position.RM,
-    Position.LF,
-    Position.RF,
+interface DemoPlayerDefinition {
+    name: string;
+    number: number;
+    position: Position;
+}
+
+const homePlayers: DemoPlayerDefinition[] = [
+    // Starting XI
+    { name: 'Nickson Pettigrew', number: 1, position: Position.GK },
+    { name: 'Lasse Quizoz', number: 17, position: Position.LB },
+    { name: 'Marvellous Pak', number: 75, position: Position.LCB },
+    { name: 'Rob Kaskel', number: 7, position: Position.RCB },
+    { name: 'Jomuel Dugelman', number: 84, position: Position.RB },
+    { name: 'Mohamad Ashwoon', number: 76, position: Position.LM },
+    { name: 'Koddi Pak', number: 61, position: Position.LCM },
+    { name: 'Morgyn Fletcher', number: 26, position: Position.RCM },
+    { name: 'Flint Stahl', number: 42, position: Position.RM },
+    { name: 'Munir Johnsen', number: 14, position: Position.LF },
+    { name: 'Rhyse Olson', number: 5, position: Position.RF },
+    // Named substitutes
+    { name: 'Elian Sorensen', number: 31, position: Position.GK },
+    { name: 'Dario Monti', number: 3, position: Position.LB },
+    { name: 'Timo Rinaldi', number: 4, position: Position.LCB },
+    { name: 'Mateo Varga', number: 33, position: Position.RCB },
+    { name: 'Luca Fenwick', number: 2, position: Position.RB },
+    { name: 'Sami Corbett', number: 11, position: Position.LM },
+    { name: 'Niko Bellini', number: 8, position: Position.LCM },
+    { name: 'Tomi Kovac', number: 6, position: Position.RCM },
+    { name: 'Enzo Marr', number: 20, position: Position.RM },
+    { name: 'Ilyas Conti', number: 9, position: Position.LF },
+    { name: 'Jamie Rossetti', number: 10, position: Position.RF },
 ];
 
-const awayPositions = [
-    Position.GK,
-    Position.LB,
-    Position.LCB,
-    Position.RCB,
-    Position.RB,
-    Position.LCM,
-    Position.CM,
-    Position.RCM,
-    Position.LW,
-    Position.CF,
-    Position.RW,
+const awayPlayers: DemoPlayerDefinition[] = [
+    // Starting XI
+    { name: 'Conal Keller', number: 1, position: Position.GK },
+    { name: 'Hadyn Kalleg', number: 37, position: Position.LB },
+    { name: 'Adenn Orwig', number: 10, position: Position.LCB },
+    { name: 'Rhyley Ingram', number: 59, position: Position.RCB },
+    { name: 'Muhammed Soulis', number: 63, position: Position.RB },
+    { name: 'Rees Baxster', number: 58, position: Position.LCM },
+    { name: 'Peter Ventotla', number: 97, position: Position.CM },
+    { name: 'Jarell Van Zandt', number: 84, position: Position.RCM },
+    { name: 'Ziyaan Myers', number: 100, position: Position.LW },
+    { name: 'Aaran Deitz', number: 64, position: Position.CF },
+    { name: 'Khalan Thompson', number: 45, position: Position.RW },
+    // Named substitutes
+    { name: 'Oskar Lind', number: 30, position: Position.GK },
+    { name: 'Leandro Costa', number: 22, position: Position.LB },
+    { name: 'Bruno Sarti', number: 4, position: Position.LCB },
+    { name: 'Mads Keller', number: 15, position: Position.RCB },
+    { name: 'Isak Moretti', number: 2, position: Position.RB },
+    { name: 'Elias Novak', number: 8, position: Position.LCM },
+    { name: 'Renzo Palmieri', number: 6, position: Position.CM },
+    { name: 'Filip Marin', number: 18, position: Position.RCM },
+    { name: 'Noah Greco', number: 17, position: Position.LW },
+    { name: 'Samir Bell', number: 9, position: Position.CF },
+    { name: 'Leo Caruso', number: 7, position: Position.RW },
 ];
-
-const homeNames = [
-    'Nickson Pettigrew',
-    'Lasse Quizoz',
-    'Marvellous Pak',
-    'Rob Kaskel',
-    'Jomuel Dugelman',
-    'Mohamad Ashwoon',
-    'Koddi Pak',
-    'Morgyn Fletcher',
-    'Flint Stahl',
-    'Munir Johnsen',
-    'Rhyse Olson',
-];
-
-const awayNames = [
-    'Conal Keller',
-    'Hadyn Kalleg',
-    'Adenn Orwig',
-    'Rhyley Ingram',
-    'Muhammed Soulis',
-    'Rees Baxster',
-    'Peter Ventotla',
-    'Jarell Van Zandt',
-    'Ziyaan Myers',
-    'Aaran Deitz',
-    'Khalan Thompson',
-];
-
-const homeNumbers = [1, 17, 75, 7, 84, 76, 61, 26, 42, 14, 5];
-const awayNumbers = [1, 37, 10, 59, 63, 59, 97, 84, 100, 64, 45];
 
 const baseAttributes: PlayerAttributes = {
     aggression: 12,
@@ -189,8 +190,8 @@ const possessionEventTypes = new Set([
 ]);
 
 export function createSimulation(): Simulation {
-    const homeTeam = createTeam(true, 'Juventus', homePositions, homeNames, homeNumbers);
-    const awayTeam = createTeam(false, 'Milan', awayPositions, awayNames, awayNumbers);
+    const homeTeam = createTeam(true, 'Juventus', homePlayers);
+    const awayTeam = createTeam(false, 'Milan', awayPlayers);
     const engine = new RealTimeEngine(homeTeam, awayTeam, {
         random: seededRandom(20260504),
         homeTactics: {
@@ -273,21 +274,19 @@ export function formatScoreSheet(events: RealTimeMatchEvent[]): RealTimeMatchEve
 function createTeam(
     home: boolean,
     name: string,
-    positions: Position[],
-    names: string[],
-    numbers: number[],
+    playerDefinitions: DemoPlayerDefinition[],
 ): Team {
-    const players = positions.map((position, index) => new Player(
+    const players = playerDefinitions.map((player, index) => new Player(
         {
-            name: names[index],
-            number: numbers[index],
+            name: player.name,
+            number: player.number,
         },
         {
             height: 178 + (index % 5) * 3,
             weight: 72 + (index % 4) * 4,
         },
-        attributesForPosition(position),
-        position,
+        attributesForPosition(player.position),
+        player.position,
     ));
 
     return new Team(home, name, players);
