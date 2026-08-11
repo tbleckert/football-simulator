@@ -134,6 +134,18 @@
         return typeof value === 'number' ? value.toFixed(2) : '-';
     }
 
+    function matchStatus(snapshot: MatchSnapshot): string {
+        if (snapshot.period === 'ended') {
+            return 'Full time';
+        }
+
+        if (snapshot.phase === 'half_time') {
+            return 'Half time';
+        }
+
+        return snapshot.time > 0 ? formatTime(snapshot.time) : 'Start';
+    }
+
     function pitchX(value: number): number {
         return value / 105 * 100;
     }
@@ -247,14 +259,13 @@
 
 <main>
     <section class="scoreboard">
-        <button type="button" class="match-minute" on:click={togglePlay}>
-            {#if playing}
-                Pause
-            {:else if snapshot.time > 0}
-                {formatTime(snapshot.time)}
-            {:else}
-                Start
-            {/if}
+        <button
+            type="button"
+            class="match-minute"
+            aria-label={playing ? 'Pause match' : 'Play match'}
+            on:click={togglePlay}
+        >
+            {matchStatus(snapshot)}
         </button>
         <div class="scores">
             <span>{snapshot.score.home}</span>
