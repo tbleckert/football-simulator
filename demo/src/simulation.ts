@@ -60,6 +60,7 @@ export interface Simulation {
     awayTeam: Team;
     snapshots: MatchSnapshot[];
     events: RealTimeMatchEvent[];
+    seed: number;
 }
 
 interface DemoPlayerDefinition {
@@ -189,11 +190,11 @@ const possessionEventTypes = new Set([
     'goalkeeper_claim',
 ]);
 
-export function createSimulation(): Simulation {
+export function createSimulation(seed = randomSeed()): Simulation {
     const homeTeam = createTeam(true, 'Juventus', homePlayers);
     const awayTeam = createTeam(false, 'Milan', awayPlayers);
     const engine = new RealTimeEngine(homeTeam, awayTeam, {
-        random: seededRandom(20260504),
+        random: seededRandom(seed),
         homeTactics: {
             formation: '4-4-2',
             style: 'high_press',
@@ -226,6 +227,7 @@ export function createSimulation(): Simulation {
         awayTeam,
         snapshots,
         events: engine.events,
+        seed,
     };
 }
 
@@ -526,6 +528,10 @@ function average(values: number[]): number {
 
 function ratio(value: number, total: number): number {
     return total ? value / total : 0;
+}
+
+function randomSeed(): number {
+    return Math.floor(Math.random() * 2147483646) + 1;
 }
 
 function seededRandom(seed: number): () => number {

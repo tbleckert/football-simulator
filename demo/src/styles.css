@@ -151,6 +151,12 @@ main {
     text-transform: uppercase;
 }
 
+.controls .seed {
+    color: var(--subtle-color);
+    font-variant-numeric: tabular-nums;
+    text-transform: uppercase;
+}
+
 .timeline,
 .controls input {
     flex: 1 0 100%;

@@ -49,7 +49,7 @@
         replayEndIndex = null;
     }
 
-    function restart(): void {
+    function newMatch(): void {
         simulation = createSimulation();
         snapshots = simulation.snapshots;
         events = simulation.events;
@@ -286,7 +286,7 @@
 
     <section class="controls" aria-label="Match controls">
         <button type="button" on:click={togglePlay}>{playing ? 'Pause' : 'Play'}</button>
-        <button type="button" on:click={restart}>Restart</button>
+        <button type="button" on:click={newMatch}>New match</button>
         <button type="button" on:click={jumpToPreviousGoal} disabled={!allGoals.length}>Previous goal</button>
         <button type="button" on:click={jumpToNextGoal} disabled={!allGoals.length}>Next goal</button>
         {#if snapshot.period === 'ended' && allGoals.length}
@@ -316,6 +316,7 @@
                 <option value="stoppages">Stoppages</option>
             </select>
         </label>
+        <span class="seed">Seed {String(simulation.seed).padStart(10, '0')}</span>
         <div class="timeline">
             <input
                 type="range"
