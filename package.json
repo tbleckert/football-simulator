@@ -21,8 +21,8 @@
   "sideEffects": false,
   "scripts": {
     "start": "npm run demo",
-    "demo": "vite --host 127.0.0.1",
-    "demo:build": "vite build",
+    "demo": "vite --config vite.config.ts --host 127.0.0.1",
+    "demo:build": "vite build --config vite.config.ts",
     "analyse": "TS_NODE_PREFER_TS_EXTS=true node --loader ts-node/esm --experimental-specifier-resolution=node test/analyse.ts",
     "test": "npm run test:realtime && npm run test:calibration && npm run test:season",
     "test:realtime": "TS_NODE_PREFER_TS_EXTS=true node --loader ts-node/esm --experimental-specifier-resolution=node test/realtime.ts",
@@ -48,7 +48,7 @@
   "bugs": {
     "url": "https://github.com/tbleckert/football-simulator/issues"
   },
-  "homepage": "https://github.com/tbleckert/football-simulator#readme",
+  "homepage": "https://tbleckert.github.io/football-simulator/",
   "engines": {
     "node": ">=18"
   },

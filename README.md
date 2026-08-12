@@ -2,6 +2,8 @@
 
 A football (soccer) simulator written in Typescript.
 
+[Open the live match simulation](https://tbleckert.github.io/football-simulator/)
+
 ## Documentation
 
 - [Documentation overview](docs/README.md)

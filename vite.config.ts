@@ -6,6 +6,7 @@ const projectRoot = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
     root: 'demo',
+    base: './',
     plugins: [svelte()],
     server: {
         host: '127.0.0.1',
