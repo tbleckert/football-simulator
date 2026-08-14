@@ -39,6 +39,7 @@
     $: passRouteEntries = Object.entries(report.match.passRoutes).sort((a, b) => b[1] - a[1]).slice(0, 6);
     $: shotRouteEntries = Object.entries(report.match.shotRoutes).sort((a, b) => b[1] - a[1]).slice(0, 6);
     $: matchStory = snapshot.period === 'ended' ? new RealTimeReporter(simulation.engine).getReport() : null;
+    $: timelineEndTime = snapshots[snapshots.length - 1]?.time || simulation.engine.matchLengthSeconds;
     $: if (allGoals.length && selectedGoalIndex >= allGoals.length) {
         selectedGoalIndex = allGoals.length - 1;
     }
@@ -111,6 +112,10 @@
 
         const player = event.player?.info.name || event.teamSide || 'Match';
 
+        if (event.type === 'offside') {
+            return `${player} caught offside`;
+        }
+
         return `${event.type.replace(/_/g, ' ')} ${player}${outcome}`;
     }
 
@@ -172,7 +177,7 @@
         }
 
         if (filter === 'set_pieces') {
-            return source.filter((event) => ['throw_in', 'corner', 'goal_kick', 'free_kick', 'penalty'].includes(event.type));
+            return source.filter((event) => ['throw_in', 'corner', 'goal_kick', 'free_kick', 'penalty', 'offside'].includes(event.type));
         }
 
         if (filter === 'discipline') {
@@ -237,7 +242,7 @@
 
         const replayWindow = goal.replayWindow || {
             startTime: Math.max(0, goal.time - 12),
-            endTime: Math.min(simulation.engine.matchLengthSeconds, goal.time + 4),
+            endTime: Math.min(timelineEndTime, goal.time + 4),
         };
 
         index = snapshotIndexAt(replayWindow.startTime);
@@ -331,7 +336,7 @@
                     <button
                         type="button"
                         class:active={goalIndex === selectedGoalIndex}
-                        style:left={`${goal.time / simulation.engine.matchLengthSeconds * 100}%`}
+                        style:left={`${goal.time / timelineEndTime * 100}%`}
                         on:click={() => jumpToGoal(goalIndex)}
                         aria-label={`Goal ${goalIndex + 1} at ${formatTime(goal.time)}`}
                     ></button>

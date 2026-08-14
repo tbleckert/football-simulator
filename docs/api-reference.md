@@ -170,7 +170,7 @@ Numeric referee values are clamped from `0` to `100`.
 | --- | --- |
 | `start()` | Starts the match and returns the first snapshot. Called automatically by `simulate()` or `tick()`. |
 | `tick()` | Advances the match by one tick and returns `{ state, events, snapshot }`. |
-| `simulate(untilSeconds)` | Runs until the requested second or full time and returns all snapshots. |
+| `simulate(untilSeconds?)` | With no target, or a target at least as long as regulation, runs through added time to full time. A smaller target advances to that absolute match-clock time. Returns all snapshots. |
 | `applyTacticalChange(side, changes, reason)` | Changes tactics for `home` or `away` and records a `tactical_change` event. |
 | `applyRoleChange(playerId, role, reason)` | Changes one simulated player's role and records a `role_change` event. |
 
@@ -185,6 +185,8 @@ Numeric referee values are clamped from `0` to `100`.
 | `awayTeam` | Away `Team`. |
 | `tickSeconds` | Tick size in seconds. |
 | `matchLengthSeconds` | Match length in seconds. |
+
+`simulate()` is the full-match form. Its final snapshot has `period: 'ended'` and `phase: 'full_time'`, after both halves and their added time. Use a target below `matchLengthSeconds` only for a partial run; later calls continue from the current state toward another absolute clock target.
 
 ## MatchSnapshot
 
@@ -267,9 +269,12 @@ Event types:
 'save'
 'miss'
 'foul'
+'offside'
 'goal'
 'recovery'
 ```
+
+An `offside` event identifies the attacking player who became involved in active play. It is followed by a `free_kick` award with `outcome: 'offside'`; that restart is indirect and is taken from the involvement position. The engine records offside position when a teammate plays the ball, applies the direct-restart exemptions for goal kicks, throw-ins, and corners, and preserves the decision through represented blocks and save rebounds. Involvement includes receiving or recovering the ball and closely contesting an opponent for it. Line-of-sight obstruction and off-ball challenges away from that represented contest are not yet modeled.
 
 ## RealTimeReporter
 
@@ -287,8 +292,8 @@ Report fields:
 | --- | --- |
 | `headline` | Scoreline headline. |
 | `summary` | One paragraph summary. |
-| `teams.home` | Home team report data. |
-| `teams.away` | Away team report data. |
+| `teams.home` | Home team report data, including goals, shots, offsides, passing, recoveries, and stamina. |
+| `teams.away` | Away team report data, including goals, shots, offsides, passing, recoveries, and stamina. |
 | `sections` | Tactical pattern, chance creation, pressing, player impact, and manager impact sections. |
 | `turningPoints` | Important match events as report sections. |
 

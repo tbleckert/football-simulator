@@ -32,10 +32,12 @@ const engine = new RealTimeEngine(homeTeam, awayTeam, {
   },
 });
 
-const snapshots = engine.simulate(90 * 60);
+const snapshots = engine.simulate();
 ```
 
-Snapshots include match time, score, ball position and velocity, all 22 player positions, stamina, tactical targets, current intents, and events from that slice. The event stream includes passes, receptions, interceptions, tackles, shots, fouls, saves, misses, goals, kickoffs, half time, and full time.
+Calling `simulate()` without a target runs through both halves and their added time, ending on the `full_time` snapshot. Passing a time below regulation instead advances to that absolute match-clock time so a caller can pause for live decisions.
+
+Snapshots include match time, score, ball position and velocity, all 22 player positions, stamina, tactical targets, current intents, and events from that slice. The event stream includes passes, receptions, interceptions, tackles, offsides, shots, fouls, saves, misses, goals, kickoffs, half time, and full time.
 
 Tactical presets (`balanced`, `possession`, `direct`, `counter`, `low_block`, and `high_press`) provide readable defaults for press, width, tempo, defensive line, compactness, mentality, and attacking focus. Individual values can still be overridden per team.
 

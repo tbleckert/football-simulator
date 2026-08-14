@@ -29,6 +29,7 @@ interface MatchAnalysis {
     passCompletion: number;
     shots: number;
     goals: number;
+    offsides: number;
     averagePossessionPasses: number;
     longestPossession: number;
     possessionsWithThreePasses: number;
@@ -78,7 +79,7 @@ interface TacticalProfile {
 
 const defaultSeeds = [20260504, 20260505, 20260506, 20260507, 20260508];
 const restartTypes = ['throw_in', 'corner', 'goal_kick', 'free_kick', 'penalty'];
-const restartAwardOutcomes = new Set(['touchline', 'goal_line', 'foul', 'penalty_foul']);
+const restartAwardOutcomes = new Set(['touchline', 'goal_line', 'foul', 'penalty_foul', 'offside']);
 
 const baseAttributes: PlayerAttributes = {
     aggression: 12,
@@ -177,7 +178,7 @@ function analyseMatch(seed: number): MatchAnalysis {
             mentality: 'balanced',
         },
     });
-    const snapshots = engine.simulate(90 * 60);
+    const snapshots = engine.simulate();
     const events = engine.events;
     const finalSnapshot = snapshots[snapshots.length - 1] as MatchSnapshot;
     const passes = events.filter((event) => event.type === 'pass');
@@ -197,6 +198,7 @@ function analyseMatch(seed: number): MatchAnalysis {
         passCompletion: ratio(receptions.length, passes.length),
         shots: shots.length,
         goals,
+        offsides: events.filter((event) => event.type === 'offside').length,
         averagePossessionPasses: average(possessions.map((possession) => possession.passes)),
         longestPossession: Math.max(0, ...possessions.map((possession) => possession.passes)),
         possessionsWithThreePasses: ratio(possessions.filter((possession) => possession.passes >= 3).length, possessions.length),
@@ -240,7 +242,7 @@ function analyseTacticalProfile(style: string, tactics: Partial<Tactics>, seeds:
                 style: 'balanced',
             },
         });
-        const snapshots = engine.simulate(90 * 60);
+        const snapshots = engine.simulate();
         const finalSnapshot = snapshots[snapshots.length - 1] as MatchSnapshot;
         const events = engine.events;
         const homePasses = events.filter((event) => event.teamSide === 'home' && event.type === 'pass');
@@ -588,6 +590,7 @@ console.log(JSON.stringify({
         passCompletion: average(matches.map((match) => match.passCompletion)),
         shots: average(matches.map((match) => match.shots)),
         goals: average(matches.map((match) => match.goals)),
+        offsides: average(matches.map((match) => match.offsides)),
         averagePossessionPasses: average(matches.map((match) => match.averagePossessionPasses)),
         longestPossession: average(matches.map((match) => match.longestPossession)),
         possessionsWithThreePasses: average(matches.map((match) => match.possessionsWithThreePasses)),

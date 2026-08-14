@@ -152,7 +152,7 @@ const engine = new RealTimeEngine(homeTeam, awayTeam, {
     },
 });
 
-const snapshots = engine.simulate(90 * 60);
+const snapshots = engine.simulate();
 const finalSnapshot = snapshots[snapshots.length - 1];
 const report = new RealTimeReporter(engine).getReport();
 
@@ -164,6 +164,8 @@ const result = {
     events: engine.events.map(toStoredEvent),
 };
 ```
+
+With no target, `simulate()` continues through first- and second-half added time and returns with the match in its `full_time` state. Pass a time below regulation only when you intend to pause the match at that absolute clock time.
 
 ## Create a Text Match Feed
 
@@ -198,6 +200,8 @@ function formatEvent(event: RealTimeMatchEvent): string | null {
             return `${minute}' ${player}'s shot is blocked.`;
         case 'penalty':
             return `${minute}' Penalty event for ${team}.`;
+        case 'offside':
+            return `${minute}' Offside against ${player}.`;
         case 'yellow_card':
             return `${minute}' ${player} is shown a yellow card.`;
         case 'red_card':
@@ -250,7 +254,7 @@ if (halfTimeScore.home < halfTimeScore.away) {
     }
 }
 
-engine.simulate(90 * 60);
+engine.simulate();
 ```
 
 ## Store Compact Events

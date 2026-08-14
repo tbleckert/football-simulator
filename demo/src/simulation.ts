@@ -16,6 +16,7 @@ export interface TeamStats {
     shotsOnGoal: number;
     tackles: number;
     fouls: number;
+    offsides: number;
     yellowCards: number;
     redCards: number;
 }
@@ -173,7 +174,7 @@ const baseAttributes: PlayerAttributes = {
 };
 
 const restartTypes = ['throw_in', 'corner', 'goal_kick', 'free_kick', 'penalty'];
-const restartAwardOutcomes = new Set(['touchline', 'goal_line', 'foul', 'penalty_foul']);
+const restartAwardOutcomes = new Set(['touchline', 'goal_line', 'foul', 'penalty_foul', 'offside']);
 const possessionEventTypes = new Set([
     'kickoff',
     'throw_in',
@@ -219,7 +220,7 @@ export function createSimulation(seed = randomSeed()): Simulation {
         },
     });
 
-    const snapshots = engine.simulate(90 * 60);
+    const snapshots = engine.simulate();
 
     return {
         engine,
@@ -353,6 +354,10 @@ function registerEvent(stats: TeamStats, event: RealTimeMatchEvent): void {
         stats.fouls += 1;
     }
 
+    if (event.type === 'offside') {
+        stats.offsides += 1;
+    }
+
     if (event.type === 'yellow_card') {
         stats.yellowCards += 1;
     }
@@ -372,6 +377,7 @@ function emptyStats(): TeamStats {
         shotsOnGoal: 0,
         tackles: 0,
         fouls: 0,
+        offsides: 0,
         yellowCards: 0,
         redCards: 0,
     };

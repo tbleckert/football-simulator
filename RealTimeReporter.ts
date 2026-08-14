@@ -10,6 +10,7 @@ export interface RealTimeReportTeam {
     style: string;
     goals: number;
     shots: number;
+    offsides: number;
     passCompletion: number;
     finalThirdRecoveries: number;
     averageStamina: number;
@@ -92,6 +93,7 @@ export default class RealTimeReporter {
             style: input.style,
             goals: input.goals,
             shots: this.eventsFor(input.side, 'shot').length,
+            offsides: this.eventsFor(input.side, 'offside').length,
             passCompletion: passes ? completions / passes : 0,
             finalThirdRecoveries: this.finalThirdRecoveries(input.side),
             averageStamina: this.average(players.map((player) => player.stamina)),

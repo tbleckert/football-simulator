@@ -110,7 +110,7 @@ export default class SeasonSimulator {
                 awayTactics: awayInput.tactics,
             });
 
-            engine.simulate(this.options.matchLengthSeconds);
+            engine.simulate();
 
             const report = this.matchReport(engine);
             matches.push(report);

@@ -57,6 +57,10 @@
                 <td>{report.fouls}</td>
             </tr>
             <tr>
+                <th>Offsides</th>
+                <td>{report.offsides}</td>
+            </tr>
+            <tr>
                 <th>Yellow cards</th>
                 <td>{report.yellowCards}</td>
             </tr>

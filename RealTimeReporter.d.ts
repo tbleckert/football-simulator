@@ -5,6 +5,7 @@ export interface RealTimeReportTeam {
     style: string;
     goals: number;
     shots: number;
+    offsides: number;
     passCompletion: number;
     finalThirdRecoveries: number;
     averageStamina: number;

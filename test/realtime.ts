@@ -5,7 +5,7 @@ import RealTimeEngine from '../RealTimeEngine';
 import RealTimeReporter from '../RealTimeReporter';
 import Team from '../Team';
 import type { PlayerAttributes } from '../Player';
-import type { MatchSnapshot } from '../RealTimeEngine';
+import type { ActiveBallAction, MatchSnapshot, RealTimeMatchEvent } from '../RealTimeEngine';
 
 function seededRandom(seed: number): () => number {
     let value = seed;
@@ -145,11 +145,47 @@ function engineInternals(engine: RealTimeEngine): {
     passRoute: (owner: RealTimeEngine['state']['players'][number], target: RealTimeEngine['state']['players'][number]) => string;
     selectPassTarget: (owner: RealTimeEngine['state']['players'][number]) => RealTimeEngine['state']['players'][number] | null;
     shotRoute: (player: RealTimeEngine['state']['players'][number], distanceToGoal: number) => string;
+    startPass: (owner: RealTimeEngine['state']['players'][number], target: RealTimeEngine['state']['players'][number]) => unknown;
+    offsideCandidateIds: (
+        side: 'home' | 'away',
+        ballPosition: { x: number, y: number },
+        restartType?: 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty',
+        sourcePlayerId?: string,
+    ) => string[];
+    playRestartPass: (
+        type: 'throw_in' | 'corner' | 'goal_kick' | 'free_kick',
+        taker: RealTimeEngine['state']['players'][number],
+        targetPlayer: RealTimeEngine['state']['players'][number] | null,
+        target: { x: number, y: number },
+        speed: number,
+        outcome: string,
+    ) => unknown;
+    resolveFirstTouch: (action: ActiveBallAction) => RealTimeMatchEvent[];
+    detectPassOutcome: (action: ActiveBallAction) => RealTimeMatchEvent[];
+    detectAerialDuel: (action: ActiveBallAction) => RealTimeMatchEvent | null;
 } {
     return engine as unknown as {
         passRoute: (owner: RealTimeEngine['state']['players'][number], target: RealTimeEngine['state']['players'][number]) => string;
         selectPassTarget: (owner: RealTimeEngine['state']['players'][number]) => RealTimeEngine['state']['players'][number] | null;
         shotRoute: (player: RealTimeEngine['state']['players'][number], distanceToGoal: number) => string;
+        startPass: (owner: RealTimeEngine['state']['players'][number], target: RealTimeEngine['state']['players'][number]) => unknown;
+        offsideCandidateIds: (
+            side: 'home' | 'away',
+            ballPosition: { x: number, y: number },
+            restartType?: 'throw_in' | 'corner' | 'goal_kick' | 'free_kick' | 'penalty',
+            sourcePlayerId?: string,
+        ) => string[];
+        playRestartPass: (
+            type: 'throw_in' | 'corner' | 'goal_kick' | 'free_kick',
+            taker: RealTimeEngine['state']['players'][number],
+            targetPlayer: RealTimeEngine['state']['players'][number] | null,
+            target: { x: number, y: number },
+            speed: number,
+            outcome: string,
+        ) => unknown;
+        resolveFirstTouch: (action: ActiveBallAction) => RealTimeMatchEvent[];
+        detectPassOutcome: (action: ActiveBallAction) => RealTimeMatchEvent[];
+        detectAerialDuel: (action: ActiveBallAction) => RealTimeMatchEvent | null;
     };
 }
 
@@ -231,7 +267,7 @@ function prepareLongPassScenario(engine: RealTimeEngine): {
     engine.state.players
         .filter((player) => player.side === 'away')
         .forEach((player, index) => {
-            player.x = 30;
+            player.x = index === 0 ? 96 : index === 1 ? 92 : 30;
             player.y = index % 2 === 0 ? 4 : 64;
         });
 
@@ -305,7 +341,9 @@ assert.ok(firstSnapshot.fieldZones.length > 0, 'snapshots should expose current 
 assert.ok(firstSnapshot.activeAttackPattern.length > 0, 'snapshots should expose the active attack pattern');
 assert.ok(engine.events.some((event) => event.possession.id > 0 && event.fieldZones.length > 0), 'events should expose possession context and field zones');
 assert.equal(firstSnapshot.phase, 'kickoff', 'the opening snapshot should expose the kickoff phase');
-assert.ok(['open_play', 'full_time'].includes(finalSnapshot.phase), 'the requested simulation window should expose a live or full-time phase');
+assert.equal(finalSnapshot.period, 'ended', 'a full-match simulation should end the match');
+assert.equal(finalSnapshot.phase, 'full_time', 'a full-match simulation should expose the full-time phase');
+assert.equal(allEvents.filter((event) => event === 'full_time').length, 1, 'the event stream should include full time exactly once');
 assert.ok(allEvents.includes('match_start'), 'the event stream should include match start');
 assert.ok(allEvents.includes('kickoff'), 'the event stream should include kickoff');
 assert.ok(allEvents.includes('pass'), 'the event stream should include passes');
@@ -552,6 +590,40 @@ const possessionTarget = engineInternals(possessionPassEngine).selectPassTarget(
 
 assert.notEqual(possessionTarget, possessionScenario.farTarget, 'possession teams should prefer shorter circulation over the same long forward pass');
 
+const offsideSelectionEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: () => 0.5,
+    homeTactics: {
+        style: 'direct',
+    },
+});
+offsideSelectionEngine.start();
+const offsideSelectionScenario = prepareLongPassScenario(offsideSelectionEngine);
+const safeSelectionTarget = offsideSelectionEngine.state.players.find((player) => (
+    player.side === 'home'
+    && player !== offsideSelectionScenario.owner
+    && player !== offsideSelectionScenario.farTarget
+    && player.role !== Position.GK
+));
+
+assert.ok(safeSelectionTarget, 'offside-aware selection needs an onside passing option');
+
+if (safeSelectionTarget) {
+    offsideSelectionScenario.farTarget.x = 90;
+    safeSelectionTarget.x = 55;
+    safeSelectionTarget.y = 34;
+    offsideSelectionEngine.state.players
+        .filter((player) => player.side === 'away')
+        .forEach((player, index) => {
+            player.x = index === 0 ? 100 : index === 1 ? 80 : 65;
+            player.y = index % 2 === 0 ? 4 : 64;
+        });
+
+    const selectedTarget = engineInternals(offsideSelectionEngine).selectPassTarget(offsideSelectionScenario.owner);
+
+    assert.equal(selectedTarget, safeSelectionTarget, 'passers should normally reject an already-offside target when an onside option exists');
+}
+
 const managerActionEngine = new RealTimeEngine(homeTeam, awayTeam, {
     matchLengthSeconds: 90 * 60,
     random: seededRandom(155),
@@ -689,6 +761,67 @@ assert.ok(secondHalfHomeGoalkeeper && secondHalfHomeGoalkeeper.x > 85, 'home goa
 assert.ok(secondHalfAwayGoalkeeper && secondHalfAwayGoalkeeper.x < 20, 'away goalkeeper should switch ends for the second half');
 assert.ok(secondHalfHomeForward && secondHalfHomeForward.x < 35, 'home forwards should attack the opposite goal in the second half');
 assert.ok(secondHalfAwayForward && secondHalfAwayForward.x > 70, 'away forwards should attack the opposite goal in the second half');
+
+const partialClockEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 120,
+    random: seededRandom(199),
+});
+const firstPartialSnapshots = partialClockEngine.simulate(10);
+
+assert.equal(firstPartialSnapshots[firstPartialSnapshots.length - 1]?.time, 10, 'partial simulation should stop at the requested absolute time');
+assert.equal(partialClockEngine.state.period, 1, 'partial simulation should leave the match active');
+assert.equal(partialClockEngine.events.some((event) => event.type === 'full_time'), false, 'partial simulation should not emit full time');
+
+const firstPartialSnapshotCount = partialClockEngine.snapshots.length;
+partialClockEngine.simulate(10);
+assert.equal(partialClockEngine.snapshots.length, firstPartialSnapshotCount, 'repeating the same partial target should not advance the match');
+
+partialClockEngine.simulate(20);
+assert.equal(partialClockEngine.state.time, 20, 'a later partial target should continue the same match');
+
+partialClockEngine.simulate();
+assert.equal(partialClockEngine.state.period, 'ended', 'a full simulation should finish after earlier partial runs');
+assert.equal(partialClockEngine.state.phase, 'full_time', 'a full simulation should expose the terminal phase');
+assert.equal(partialClockEngine.events.filter((event) => event.type === 'full_time').length, 1, 'a completed match should emit full time exactly once');
+
+const completedSnapshotCount = partialClockEngine.snapshots.length;
+partialClockEngine.simulate();
+assert.equal(partialClockEngine.snapshots.length, completedSnapshotCount, 'simulating an ended match should be a no-op');
+
+const firstHalfAddedTimeEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 120,
+    random: seededRandom(200),
+});
+firstHalfAddedTimeEngine.start();
+firstHalfAddedTimeEngine.state.time = 69.75;
+firstHalfAddedTimeEngine.state.addedTime.firstHalf = 10;
+const addedHalfTimeSnapshot = firstHalfAddedTimeEngine.tick().snapshot;
+
+assert.equal(addedHalfTimeSnapshot.time, 70, 'first-half stoppage time should extend the half-time boundary');
+assert.equal(addedHalfTimeSnapshot.phase, 'half_time', 'the extended first half should still end at half time');
+
+firstHalfAddedTimeEngine.state.time = 129.75;
+const addedFullTimeSnapshot = firstHalfAddedTimeEngine.tick().snapshot;
+
+assert.equal(addedFullTimeSnapshot.time, 130, 'first-half stoppage time should not shorten the second half');
+assert.equal(addedFullTimeSnapshot.phase, 'full_time', 'the match should finish after both full halves are played');
+
+const secondHalfAddedTimeEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 120,
+    random: seededRandom(201),
+});
+secondHalfAddedTimeEngine.start();
+secondHalfAddedTimeEngine.state.period = 2;
+secondHalfAddedTimeEngine.state.phase = 'open_play';
+secondHalfAddedTimeEngine.state.time = 129.75;
+secondHalfAddedTimeEngine.state.addedTime.secondHalf = 10;
+secondHalfAddedTimeEngine.simulate(120);
+
+assert.equal(secondHalfAddedTimeEngine.state.time, 130, 'an explicit regulation-length simulation should include second-half stoppage time');
+assert.equal(secondHalfAddedTimeEngine.state.period, 'ended', 'second-half stoppage time should end with a completed match');
+assert.equal(secondHalfAddedTimeEngine.events.filter((event) => event.type === 'full_time').length, 1, 'second-half stoppage time should emit one full-time event');
 
 const shuffledHomeTeam = createTeam(true, 'Shuffled Home', [
     Position.RF,
@@ -1450,6 +1583,647 @@ if (throughPasser && throughReceiver) {
 
 assert.ok(throughReceiveEngine.events.some((event) => event.type === 'receive' && event.playerId === throughReceiver?.id), 'a well-weighted through ball should be receivable in stride');
 
+const offsideEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: () => 0,
+});
+offsideEngine.start();
+
+const offsidePasser = offsideEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+const offsideReceiver = offsideEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const offsideDefenders = offsideEngine.state.players.filter((player) => player.side === 'away');
+
+assert.ok(offsidePasser && offsideReceiver && offsideDefenders.length >= 2, 'the offside scenario needs a passer, receiver, and defensive line');
+
+if (offsidePasser && offsideReceiver) {
+    offsidePasser.x = 60;
+    offsidePasser.y = 34;
+    offsideReceiver.x = 90;
+    offsideReceiver.y = 34;
+    offsideDefenders.forEach((player, index) => {
+        player.x = index === 0 ? 100 : index === 1 ? 80 : 65;
+        player.y = index % 2 === 0 ? 4 : 64;
+    });
+    offsideEngine.state.ball.owner = offsidePasser;
+    offsideEngine.state.ball.x = offsidePasser.x;
+    offsideEngine.state.ball.y = offsidePasser.y;
+    engineInternals(offsideEngine).startPass(offsidePasser, offsideReceiver);
+
+    offsideDefenders.forEach((player) => {
+        player.x = 100;
+    });
+    offsideEngine.state.ball.x = offsideReceiver.x;
+    offsideEngine.state.ball.y = offsideReceiver.y;
+    offsideEngine.state.ball.velocity = { x: 0, y: 0 };
+    offsideEngine.tick();
+}
+
+assert.ok(offsideEngine.events.some((event) => (event.type as string) === 'offside' && event.playerId === offsideReceiver?.id), 'a flagged receiver should be penalised when becoming involved');
+assert.equal(offsideEngine.events.some((event) => event.type === 'receive' && event.playerId === offsideReceiver?.id), false, 'an offside receiver should not complete the pass');
+assert.equal(offsideEngine.state.phase, 'free_kick', 'offside should stop play for an indirect free kick');
+assert.equal(offsideEngine.state.restart?.teamSide, 'away', 'offside should award the restart to the defending team');
+assert.equal(offsideEngine.state.restart?.reason, 'offside', 'the restart should retain its offside reason');
+assert.ok(offsideEngine.events.some((event) => event.type === 'free_kick' && event.outcome === 'offside'), 'offside should emit the defending free-kick award');
+assert.equal(new RealTimeReporter(offsideEngine).getReport().teams.home.offsides, 1, 'match reports should count the attacking team offside');
+
+function interferenceAction(
+    engine: RealTimeEngine,
+    route: string,
+): { action: ActiveBallAction, target: RealTimeEngine['state']['players'][number] } {
+    const passer = engine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+    const target = engine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+
+    assert.ok(passer && target, 'offside interference checks need a passer and target');
+
+    if (!passer || !target) {
+        throw new Error('Missing offside interference players');
+    }
+
+    return {
+        target,
+        action: {
+            type: 'pass',
+            from: passer,
+            teamSide: 'home',
+            origin: { x: passer.x, y: passer.y },
+            target: { x: target.x, y: target.y },
+            targetPlayer: target,
+            inaccurate: false,
+            quality: 0.9,
+            passSpeed: 18,
+            receiveDifficulty: 0.1,
+            targetKind: 'space',
+            route,
+            offsideCandidateIds: [target.id],
+        },
+    };
+}
+
+const sweeperInterferenceEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: () => 0,
+});
+sweeperInterferenceEngine.start();
+const sweeperScenario = interferenceAction(sweeperInterferenceEngine, 'through_ball');
+const sweepingGoalkeeper = sweeperInterferenceEngine.state.players.find((player) => player.side === 'away' && player.role === Position.GK);
+
+assert.ok(sweepingGoalkeeper, 'the sweeper interference check needs a goalkeeper');
+
+if (sweepingGoalkeeper) {
+    sweeperScenario.target.x = 96;
+    sweeperScenario.target.y = 34;
+    sweepingGoalkeeper.x = 97;
+    sweepingGoalkeeper.y = 34;
+    sweeperInterferenceEngine.state.ball.owner = null;
+    sweeperInterferenceEngine.state.ball.x = 96.5;
+    sweeperInterferenceEngine.state.ball.y = 34;
+    const events = engineInternals(sweeperInterferenceEngine).detectPassOutcome(sweeperScenario.action);
+
+    assert.ok(events.some((event) => event.type === 'offside' && event.outcome === 'interfering_with_opponent'), 'an offside target challenging a sweeping goalkeeper should be penalised');
+    assert.equal(events.some((event) => event.type === 'goalkeeper_claim'), false, 'the goalkeeper claim should not replace an earlier offside offence');
+}
+
+const interceptorInterferenceEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: () => 0,
+});
+interceptorInterferenceEngine.start();
+const interceptorScenario = interferenceAction(interceptorInterferenceEngine, 'lateral_support');
+const challengingInterceptor = interceptorInterferenceEngine.state.players.find((player) => player.side === 'away' && player.role === Position.LCB);
+
+assert.ok(challengingInterceptor, 'the interceptor interference check needs a defender');
+
+if (challengingInterceptor) {
+    interceptorScenario.target.x = 70;
+    interceptorScenario.target.y = 34;
+    challengingInterceptor.x = 70.5;
+    challengingInterceptor.y = 34;
+    interceptorInterferenceEngine.state.ball.owner = null;
+    interceptorInterferenceEngine.state.ball.x = 70;
+    interceptorInterferenceEngine.state.ball.y = 34;
+    const events = engineInternals(interceptorInterferenceEngine).detectPassOutcome(interceptorScenario.action);
+
+    assert.ok(events.some((event) => event.type === 'offside' && event.outcome === 'interfering_with_opponent'), 'an offside target challenging an interceptor should be penalised');
+    assert.equal(events.some((event) => event.type === 'interception'), false, 'an interception should not replace an earlier offside offence');
+}
+
+const passiveOffsideEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: () => 0,
+});
+passiveOffsideEngine.start();
+const passiveScenario = interferenceAction(passiveOffsideEngine, 'cross');
+const claimingGoalkeeper = passiveOffsideEngine.state.players.find((player) => player.side === 'away' && player.role === Position.GK);
+
+assert.ok(claimingGoalkeeper, 'the passive offside check needs a goalkeeper');
+
+if (claimingGoalkeeper) {
+    passiveScenario.target.x = 80;
+    passiveScenario.target.y = 34;
+    claimingGoalkeeper.x = 100;
+    claimingGoalkeeper.y = 34;
+    passiveOffsideEngine.state.ball.owner = null;
+    passiveOffsideEngine.state.ball.x = claimingGoalkeeper.x;
+    passiveOffsideEngine.state.ball.y = claimingGoalkeeper.y;
+    const events = engineInternals(passiveOffsideEngine).detectPassOutcome(passiveScenario.action);
+
+    assert.ok(events.some((event) => event.type === 'goalkeeper_claim'), 'a goalkeeper should still claim when the flagged target remains passive and distant');
+    assert.equal(events.some((event) => event.type === 'offside'), false, 'offside position alone should not cancel a distant goalkeeper claim');
+}
+
+const offsideGeometryEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: seededRandom(156),
+});
+offsideGeometryEngine.start();
+
+const geometryHomeReceiver = offsideGeometryEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const geometryAwayReceiver = offsideGeometryEngine.state.players.find((player) => player.side === 'away' && player.role === Position.RW);
+const geometryHomePlayers = offsideGeometryEngine.state.players.filter((player) => player.side === 'home');
+const geometryAwayPlayers = offsideGeometryEngine.state.players.filter((player) => player.side === 'away');
+const geometryInternals = engineInternals(offsideGeometryEngine);
+
+assert.ok(geometryHomeReceiver && geometryAwayReceiver, 'offside geometry checks need attackers in both directions');
+
+if (geometryHomeReceiver && geometryAwayReceiver) {
+    geometryAwayPlayers.forEach((player, index) => {
+        player.x = index === 0 ? 100 : index === 1 ? 80 : 65;
+    });
+    geometryHomeReceiver.x = 90;
+    assert.ok(geometryInternals.offsideCandidateIds('home', { x: 60, y: 34 }).includes(geometryHomeReceiver.id), 'an attacker beyond the ball and second-last opponent should be flagged');
+
+    geometryHomeReceiver.x = 80;
+    assert.equal(geometryInternals.offsideCandidateIds('home', { x: 60, y: 34 }).includes(geometryHomeReceiver.id), false, 'an attacker level with the second-last opponent should be onside');
+
+    geometryHomeReceiver.x = 90;
+    assert.equal(geometryInternals.offsideCandidateIds('home', { x: 95, y: 34 }).includes(geometryHomeReceiver.id), false, 'an attacker behind the ball should be onside');
+
+    geometryAwayPlayers.forEach((player, index) => {
+        player.x = index === 0 ? 40 : index === 1 ? 30 : 20;
+    });
+    geometryHomeReceiver.x = 50;
+    assert.equal(geometryInternals.offsideCandidateIds('home', { x: 40, y: 34 }).includes(geometryHomeReceiver.id), false, 'an attacker in their own half should be onside');
+
+    offsideGeometryEngine.state.period = 2;
+    geometryAwayPlayers.forEach((player, index) => {
+        player.x = index === 0 ? 5 : index === 1 ? 25 : 35;
+    });
+    geometryHomeReceiver.x = 15;
+    assert.ok(geometryInternals.offsideCandidateIds('home', { x: 40, y: 34 }).includes(geometryHomeReceiver.id), 'offside should mirror when teams change ends');
+
+    offsideGeometryEngine.state.period = 1;
+    geometryHomePlayers.forEach((player, index) => {
+        player.x = index === 0 ? 5 : index === 1 ? 25 : 35;
+    });
+    geometryAwayReceiver.x = 15;
+    assert.ok(geometryInternals.offsideCandidateIds('away', { x: 40, y: 34 }).includes(geometryAwayReceiver.id), 'away attacks should use the opposite first-half direction');
+}
+
+const lateRunEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: () => 0,
+});
+lateRunEngine.start();
+
+const lateRunPasser = lateRunEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+const lateRunner = lateRunEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const lateRunDefenders = lateRunEngine.state.players.filter((player) => player.side === 'away');
+
+assert.ok(lateRunPasser && lateRunner, 'the late-run scenario needs a passer and receiver');
+
+if (lateRunPasser && lateRunner) {
+    lateRunPasser.x = 60;
+    lateRunPasser.y = 34;
+    lateRunner.x = 75;
+    lateRunner.y = 34;
+    lateRunDefenders.forEach((player, index) => {
+        player.x = index === 0 ? 100 : index === 1 ? 80 : 65;
+        player.y = index % 2 === 0 ? 4 : 64;
+    });
+    lateRunEngine.state.ball.owner = lateRunPasser;
+    lateRunEngine.state.ball.x = lateRunPasser.x;
+    lateRunEngine.state.ball.y = lateRunPasser.y;
+    engineInternals(lateRunEngine).startPass(lateRunPasser, lateRunner);
+
+    lateRunner.x = 90;
+    lateRunDefenders.forEach((player) => {
+        player.x = 65;
+    });
+    lateRunEngine.state.ball.x = lateRunner.x;
+    lateRunEngine.state.ball.y = lateRunner.y;
+    lateRunEngine.state.ball.velocity = { x: 0, y: 0 };
+    lateRunEngine.tick();
+}
+
+assert.ok(lateRunEngine.events.some((event) => event.type === 'receive' && event.playerId === lateRunner?.id), 'a player who was onside at the pass should remain eligible after running beyond the defence');
+assert.equal(lateRunEngine.events.some((event) => event.type === 'offside'), false, 'offside should be judged when the teammate plays the ball');
+
+function looseFirstTouchScenario(
+    originalOffsideCandidate: boolean,
+    runnerXAtTouch: number,
+    ballXAtTouch: number = 70,
+    secondLastDefenderX: number = 80,
+): {
+    engine: RealTimeEngine;
+    receiver: RealTimeEngine['state']['players'][number];
+    runner: RealTimeEngine['state']['players'][number];
+} {
+    const engine = new RealTimeEngine(homeTeam, awayTeam, {
+        matchLengthSeconds: 10,
+        random: () => 0.99,
+    });
+    engine.start();
+
+    const passer = engine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+    const receiver = engine.state.players.find((player) => player.side === 'home' && player.role === Position.LCM);
+    const runner = engine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+    const defenders = engine.state.players.filter((player) => player.side === 'away');
+
+    assert.ok(passer && receiver && runner, 'the loose-touch scenario needs a passer, receiver, and runner');
+
+    if (!passer || !receiver || !runner) {
+        throw new Error('Missing loose-touch scenario players');
+    }
+
+    passer.x = 60;
+    passer.y = 34;
+    receiver.x = 70;
+    receiver.y = 34;
+    runner.x = runnerXAtTouch;
+    runner.y = 34;
+    defenders.forEach((player, index) => {
+        player.x = index === 0 ? 100 : index === 1 ? secondLastDefenderX : 50;
+        player.y = index % 2 === 0 ? 4 : 64;
+    });
+    engine.state.ball.owner = null;
+    engine.state.ball.x = ballXAtTouch;
+    engine.state.ball.y = receiver.y;
+    engine.state.ball.velocity = { x: 0, y: 0 };
+
+    const action: ActiveBallAction = {
+        type: 'pass',
+        from: passer,
+        teamSide: 'home',
+        origin: { x: passer.x, y: passer.y },
+        target: { x: receiver.x, y: receiver.y },
+        targetPlayer: receiver,
+        inaccurate: false,
+        quality: 0.8,
+        passSpeed: 12,
+        receiveDifficulty: 0.4,
+        targetKind: 'feet',
+        route: 'lateral_support',
+        offsideCandidateIds: originalOffsideCandidate ? [runner.id] : [],
+    };
+
+    const events = engineInternals(engine).resolveFirstTouch(action);
+
+    assert.ok(events.some((event) => event.type === 'second_ball' && event.outcome === 'loose_first_touch'), 'the forced poor touch should create a second ball');
+
+    return { engine, receiver, runner };
+}
+
+const runnerBackOnside = looseFirstTouchScenario(true, 75);
+
+assert.equal(runnerBackOnside.engine.state.secondBall?.sourcePlayerId, runnerBackOnside.receiver.id, 'a loose touch should become the new offside source');
+assert.equal(runnerBackOnside.engine.state.secondBall?.offsideCandidateIds?.includes(runnerBackOnside.runner.id), false, 'the new touch should clear an original candidate who is now onside');
+
+const runnerNewlyOffside = looseFirstTouchScenario(false, 69, 68, 65);
+
+assert.ok(runnerNewlyOffside.engine.state.secondBall?.offsideCandidateIds?.includes(runnerNewlyOffside.runner.id), 'the new touch should flag a runner who has moved offside');
+
+runnerNewlyOffside.engine.state.players
+    .filter((player) => player !== runnerNewlyOffside.runner)
+    .forEach((player, index) => {
+        player.x = 30;
+        player.y = index % 2 === 0 ? 4 : 64;
+    });
+runnerNewlyOffside.runner.x = runnerNewlyOffside.engine.state.ball.x;
+runnerNewlyOffside.runner.y = runnerNewlyOffside.engine.state.ball.y;
+runnerNewlyOffside.engine.state.ball.velocity = { x: 0, y: 0 };
+runnerNewlyOffside.engine.tick();
+
+assert.ok(runnerNewlyOffside.engine.events.some((event) => event.type === 'offside' && event.playerId === runnerNewlyOffside.runner.id), 'a newly flagged runner should be penalised when recovering the loose touch');
+
+function restartOffsideCandidates(type: 'throw_in' | 'corner' | 'goal_kick' | 'free_kick'): string[] {
+    const restartEngine = new RealTimeEngine(homeTeam, awayTeam, {
+        matchLengthSeconds: 10,
+        random: seededRandom(157),
+    });
+    restartEngine.start();
+
+    const taker = restartEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+    const target = restartEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+    const defenders = restartEngine.state.players.filter((player) => player.side === 'away');
+
+    assert.ok(taker && target, `${type} offside checks need a taker and target`);
+
+    if (!taker || !target) {
+        return [];
+    }
+
+    target.x = 90;
+    target.y = 34;
+    defenders.forEach((player, index) => {
+        player.x = index === 0 ? 100 : index === 1 ? 80 : 65;
+    });
+    restartEngine.state.restart = {
+        phase: type,
+        teamSide: 'home',
+        position: { x: 60, y: 34 },
+        reason: 'test_restart',
+    };
+    restartEngine.state.ball.owner = taker;
+    engineInternals(restartEngine).playRestartPass(type, taker, target, target, 20, 'test_restart');
+
+    return restartEngine.state.activeBallAction?.offsideCandidateIds || [];
+}
+
+assert.deepEqual(restartOffsideCandidates('throw_in'), [], 'a direct throw-in receipt should be exempt from offside');
+assert.deepEqual(restartOffsideCandidates('corner'), [], 'a direct corner receipt should be exempt from offside');
+assert.deepEqual(restartOffsideCandidates('goal_kick'), [], 'a direct goal-kick receipt should be exempt from offside');
+assert.ok(restartOffsideCandidates('free_kick').length > 0, 'a free-kick receipt should still be subject to offside');
+
+const goalKickHeaderEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    matchLengthSeconds: 10,
+    random: () => 0.99,
+});
+goalKickHeaderEngine.start();
+
+const goalKickHeaderTaker = goalKickHeaderEngine.state.players.find((player) => player.side === 'home' && player.role === Position.GK);
+const goalKickHeader = goalKickHeaderEngine.state.players.find((player) => player.side === 'home' && player.role === Position.LF);
+const goalKickRunner = goalKickHeaderEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+const goalKickDefenders = goalKickHeaderEngine.state.players.filter((player) => player.side === 'away');
+
+assert.ok(goalKickHeaderTaker && goalKickHeader && goalKickRunner && goalKickDefenders.length >= 2, 'the goal-kick header scenario needs a taker, header, runner, and defenders');
+
+if (goalKickHeaderTaker && goalKickHeader && goalKickRunner) {
+    goalKickHeader.x = 80;
+    goalKickHeader.y = 34;
+    goalKickRunner.x = 79;
+    goalKickRunner.y = 34;
+    goalKickDefenders.forEach((player, index) => {
+        player.x = index === 0 ? 100 : index === 1 ? 75 : 60;
+        player.y = index === 1 ? 34 : index % 2 === 0 ? 4 : 64;
+    });
+    goalKickHeaderEngine.state.ball.owner = null;
+    goalKickHeaderEngine.state.ball.x = 78;
+    goalKickHeaderEngine.state.ball.y = goalKickHeader.y;
+    goalKickHeaderEngine.state.ball.velocity = { x: 0, y: 0 };
+
+    const action: ActiveBallAction = {
+        type: 'pass',
+        from: goalKickHeaderTaker,
+        teamSide: 'home',
+        origin: { x: 5, y: 34 },
+        target: { x: goalKickHeader.x, y: goalKickHeader.y },
+        targetPlayer: goalKickHeader,
+        inaccurate: false,
+        quality: 0.8,
+        passSpeed: 34,
+        receiveDifficulty: 0.7,
+        targetKind: 'contest',
+        route: 'long_kick',
+        restartType: 'goal_kick',
+        offsideCandidateIds: [],
+    };
+
+    const duelEvent = engineInternals(goalKickHeaderEngine).detectAerialDuel(action);
+
+    assert.equal(duelEvent?.type, 'aerial_duel', 'the direct goal kick should reach the attacking header without offside');
+    assert.equal(goalKickHeaderEngine.state.secondBall?.sourcePlayerId, goalKickHeader.id, 'the attacking header should become the next offside source');
+    assert.ok(goalKickHeaderEngine.state.secondBall?.offsideCandidateIds?.includes(goalKickRunner.id), 'the goal-kick exemption should end when an attacker heads the ball');
+
+    goalKickHeaderEngine.state.players
+        .filter((player) => player !== goalKickRunner)
+        .forEach((player, index) => {
+            player.x = 30;
+            player.y = index % 2 === 0 ? 4 : 64;
+        });
+    goalKickRunner.x = goalKickHeaderEngine.state.ball.x;
+    goalKickRunner.y = goalKickHeaderEngine.state.ball.y;
+    goalKickHeaderEngine.state.ball.velocity = { x: 0, y: 0 };
+    goalKickHeaderEngine.tick();
+}
+
+assert.ok(goalKickHeaderEngine.events.some((event) => event.type === 'offside' && event.playerId === goalKickRunner?.id), 'an offside runner recovering the loose header should concede the indirect free kick');
+
+const indirectFreeKickEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: () => 0,
+});
+indirectFreeKickEngine.start();
+
+const indirectFreeKickTaker = indirectFreeKickEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+
+assert.ok(indirectFreeKickTaker, 'the indirect-free-kick scenario needs a taker');
+
+if (indirectFreeKickTaker) {
+    indirectFreeKickEngine.state.phase = 'free_kick';
+    indirectFreeKickEngine.state.restart = {
+        phase: 'free_kick',
+        teamSide: 'home',
+        position: { x: 85, y: 34 },
+        reason: 'offside',
+        freeKickKind: 'indirect',
+    };
+    indirectFreeKickEngine.state.ball.owner = indirectFreeKickTaker;
+    indirectFreeKickEngine.tick();
+}
+
+assert.ok(indirectFreeKickEngine.events.some((event) => event.type === 'free_kick' && event.outcome === 'indirect_free_kick'), 'an offside restart should be played indirectly even within direct-shot range');
+assert.equal(indirectFreeKickEngine.state.activeBallAction?.type, 'pass', 'an offside restart should not become a direct shot');
+
+const offsideSecondBallEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: () => 0,
+});
+offsideSecondBallEngine.start();
+
+const offsideSecondBallSource = offsideSecondBallEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+const offsideSecondBallPlayer = offsideSecondBallEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+
+assert.ok(offsideSecondBallSource && offsideSecondBallPlayer, 'the offside rebound scenario needs a source and recovering attacker');
+
+if (offsideSecondBallSource && offsideSecondBallPlayer) {
+    offsideSecondBallEngine.state.players
+        .filter((player) => player !== offsideSecondBallPlayer)
+        .forEach((player, index) => {
+            player.x = 30;
+            player.y = index % 2 === 0 ? 4 : 64;
+        });
+    offsideSecondBallPlayer.x = 90;
+    offsideSecondBallPlayer.y = 34;
+    offsideSecondBallEngine.state.ball.owner = null;
+    offsideSecondBallEngine.state.ball.x = offsideSecondBallPlayer.x;
+    offsideSecondBallEngine.state.ball.y = offsideSecondBallPlayer.y;
+    offsideSecondBallEngine.state.ball.velocity = { x: 0, y: 0 };
+    offsideSecondBallEngine.state.secondBall = {
+        x: offsideSecondBallPlayer.x,
+        y: offsideSecondBallPlayer.y,
+        expiresAt: offsideSecondBallEngine.state.time + 4,
+        teamSide: 'home',
+        sourcePlayerId: offsideSecondBallSource.id,
+        source: 'rebound',
+        offsideCandidateIds: [offsideSecondBallPlayer.id],
+    };
+    offsideSecondBallEngine.tick();
+}
+
+assert.ok(offsideSecondBallEngine.events.some((event) => event.type === 'offside' && event.playerId === offsideSecondBallPlayer?.id), 'an offside-positioned attacker should be penalised when recovering a rebound');
+assert.equal(offsideSecondBallEngine.events.some((event) => event.type === 'recovery' && event.playerId === offsideSecondBallPlayer?.id), false, 'an offside rebound should not award possession');
+
+const expiredOffsideLineageEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: () => 0,
+});
+expiredOffsideLineageEngine.start();
+
+const expiredLineageSource = expiredOffsideLineageEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+const expiredLineagePlayer = expiredOffsideLineageEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+
+assert.ok(expiredLineageSource && expiredLineagePlayer, 'the expired-lineage scenario needs a source and recovering attacker');
+
+if (expiredLineageSource && expiredLineagePlayer) {
+    expiredOffsideLineageEngine.state.players
+        .filter((player) => player !== expiredLineagePlayer)
+        .forEach((player, index) => {
+            player.x = 30;
+            player.y = index % 2 === 0 ? 4 : 64;
+        });
+    expiredLineagePlayer.x = 90;
+    expiredLineagePlayer.y = 34;
+    expiredOffsideLineageEngine.state.ball.owner = null;
+    expiredOffsideLineageEngine.state.ball.x = expiredLineagePlayer.x;
+    expiredOffsideLineageEngine.state.ball.y = expiredLineagePlayer.y;
+    expiredOffsideLineageEngine.state.ball.velocity = { x: 0, y: 0 };
+    expiredOffsideLineageEngine.state.secondBall = {
+        x: expiredLineagePlayer.x,
+        y: expiredLineagePlayer.y,
+        expiresAt: expiredOffsideLineageEngine.state.time + expiredOffsideLineageEngine.tickSeconds,
+        teamSide: 'home',
+        sourcePlayerId: expiredLineageSource.id,
+        source: 'rebound',
+        offsideCandidateIds: [expiredLineagePlayer.id],
+    };
+    expiredOffsideLineageEngine.tick();
+}
+
+assert.ok(expiredOffsideLineageEngine.events.some((event) => event.type === 'offside' && event.playerId === expiredLineagePlayer?.id), 'offside lineage should survive the tactical second-ball window');
+assert.equal(expiredOffsideLineageEngine.events.some((event) => event.type === 'recovery' && event.playerId === expiredLineagePlayer?.id), false, 'an expired tactical window should not make an offside recovery legal');
+
+function expiredLooseBallChallenge(candidateDistance: number): {
+    engine: RealTimeEngine;
+    candidate: RealTimeEngine['state']['players'][number];
+    defender: RealTimeEngine['state']['players'][number];
+} {
+    const engine = new RealTimeEngine(homeTeam, awayTeam, {
+        tickSeconds: 0.01,
+        matchLengthSeconds: 10,
+        random: () => 0,
+    });
+    engine.start();
+
+    const source = engine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+    const candidate = engine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+    const defender = engine.state.players.find((player) => player.side === 'away' && player.role === Position.LCB);
+
+    assert.ok(source && candidate && defender, 'the loose-ball interference scenario needs a source, candidate, and defender');
+
+    if (!source || !candidate || !defender) {
+        throw new Error('Missing loose-ball interference players');
+    }
+
+    engine.state.players
+        .filter((player) => player !== candidate && player !== defender)
+        .forEach((player, index) => {
+            player.x = 30;
+            player.y = index % 2 === 0 ? 4 : 64;
+        });
+    candidate.x = 90 + candidateDistance;
+    candidate.y = 34;
+    defender.x = 90.4;
+    defender.y = 34;
+    engine.state.ball.owner = null;
+    engine.state.ball.x = 90;
+    engine.state.ball.y = 34;
+    engine.state.ball.velocity = { x: 0, y: 0 };
+    engine.state.secondBall = {
+        x: 90,
+        y: 34,
+        expiresAt: engine.state.time + engine.tickSeconds,
+        teamSide: 'home',
+        sourcePlayerId: source.id,
+        source: 'rebound',
+        offsideCandidateIds: [candidate.id],
+    };
+    engine.tick();
+
+    return { engine, candidate, defender };
+}
+
+const closeLooseBallChallenge = expiredLooseBallChallenge(0.9);
+
+assert.ok(closeLooseBallChallenge.engine.events.some((event) => (
+    event.type === 'offside'
+    && event.playerId === closeLooseBallChallenge.candidate.id
+    && event.outcome === 'interfering_with_opponent'
+)), 'a nearby offside candidate challenging a closer defender should be penalised');
+assert.equal(closeLooseBallChallenge.engine.events.some((event) => event.type === 'recovery' && event.playerId === closeLooseBallChallenge.defender.id), false, 'a defender recovery should not precede an active offside offence');
+
+const passiveLooseBallCandidate = expiredLooseBallChallenge(5);
+
+assert.equal(passiveLooseBallCandidate.engine.events.some((event) => event.type === 'offside'), false, 'a distant offside candidate should remain passive');
+assert.ok(passiveLooseBallCandidate.engine.events.some((event) => event.type === 'recovery' && event.playerId === passiveLooseBallCandidate.defender.id), 'a defender should recover when the offside candidate does not interfere');
+
+const uninvolvedOffsideEngine = new RealTimeEngine(homeTeam, awayTeam, {
+    tickSeconds: 0.25,
+    matchLengthSeconds: 10,
+    random: () => 0.99,
+});
+uninvolvedOffsideEngine.start();
+
+const uninvolvedShooter = uninvolvedOffsideEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RCM);
+const uninvolvedAttacker = uninvolvedOffsideEngine.state.players.find((player) => player.side === 'home' && player.role === Position.RF);
+
+assert.ok(uninvolvedShooter && uninvolvedAttacker, 'the uninvolved offside scenario needs a shooter and attacker');
+
+if (uninvolvedShooter && uninvolvedAttacker) {
+    uninvolvedOffsideEngine.state.players
+        .filter((player) => player.side === 'away')
+        .forEach((player, index) => {
+            player.x = 70;
+            player.y = index % 2 === 0 ? 4 : 64;
+        });
+    uninvolvedAttacker.x = 100;
+    uninvolvedAttacker.y = 50;
+    uninvolvedOffsideEngine.state.ball.owner = null;
+    uninvolvedOffsideEngine.state.ball.x = 106;
+    uninvolvedOffsideEngine.state.ball.y = 34;
+    uninvolvedOffsideEngine.state.ball.velocity = { x: 0, y: 0 };
+    uninvolvedOffsideEngine.state.activeBallAction = {
+        type: 'shot',
+        from: uninvolvedShooter,
+        teamSide: 'home',
+        origin: { x: 90, y: 34 },
+        target: { x: 105, y: 34 },
+        inaccurate: false,
+        quality: 0.9,
+        chanceQuality: 0.9,
+        route: 'placed_finish',
+        offsideCandidateIds: [uninvolvedAttacker.id],
+    };
+    uninvolvedOffsideEngine.tick();
+}
+
+assert.ok(uninvolvedOffsideEngine.events.some((event) => event.type === 'goal'), 'an offside-positioned teammate who does not become involved should not cancel a goal');
+assert.equal(uninvolvedOffsideEngine.events.some((event) => event.type === 'offside'), false, 'offside position alone should not be an offence');
+
 const secondBallEngine = new RealTimeEngine(homeTeam, awayTeam, {
     tickSeconds: 0.25,
     matchLengthSeconds: 10,
@@ -1751,10 +2525,18 @@ const rateMatches = longShotRateSeeds.map((seed) => {
         matchLengthSeconds: 90 * 60,
         random: seededRandom(seed),
     });
-    longShotRateEngine.simulate(90 * 60);
+    longShotRateEngine.simulate();
 
     return longShotRateEngine.events;
 });
+const naturalOffsideCounts = rateMatches.map((events) => events.filter((event) => event.type === 'offside').length);
+
+assert.ok(
+    naturalOffsideCounts.every((count) => count <= 12),
+    `offside enforcement should not produce implausible whistle counts: ${naturalOffsideCounts.join(', ')}`,
+);
+assert.ok(naturalOffsideCounts.some((count) => count > 0), 'seeded full matches should still produce natural offside decisions');
+
 const longShotRates = rateMatches.map((events) => {
     const shots = events.filter((event) => event.type === 'shot');
     const longShots = shots.filter((event) => event.outcome === 'long_shot');
