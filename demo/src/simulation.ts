@@ -66,6 +66,23 @@ export interface Simulation {
     seed: number;
 }
 
+export interface SquadPlayerStats {
+    name: string;
+    number: number;
+    position: string;
+    onPitch: boolean;
+    appeared: boolean;
+    stamina: number | null;
+    passesAttempted: number;
+    passesCompleted: number;
+    defensiveActions: number;
+    shots: number;
+    goals: number;
+    yellowCards: number;
+    redCard: boolean;
+    injurySeverity: 'none' | 'knock' | 'minor' | 'forced';
+}
+
 export interface ScheduledTacticalChange {
     at: number;
     side: TeamSide;
@@ -387,11 +404,69 @@ export function eventsUntil(events: RealTimeMatchEvent[], snapshot: MatchSnapsho
     return events.filter((event) => event.time <= snapshot.time);
 }
 
+export function squadStats(
+    players: Player[],
+    snapshot: MatchSnapshot,
+    events: RealTimeMatchEvent[],
+    side: TeamSide = 'home',
+): SquadPlayerStats[] {
+    return players.map((player) => {
+        const currentPlayer = snapshot.players.find((candidate) => (
+            candidate.teamSide === side
+            && candidate.playerNumber === player.info.number
+            && candidate.playerName === player.info.name
+        ));
+        const primaryEvents = events.filter((event) => samePlayer(event.player, player));
+        const appeared = Boolean(currentPlayer)
+            || primaryEvents.length > 0
+            || events.some((event) => samePlayer(event.secondaryPlayer, player));
+        const yellowCards = primaryEvents.filter((event) => event.type === 'yellow_card').length;
+        const injuryEvent = [...primaryEvents].reverse().find((event) => event.type === 'injury');
+        const injurySeverity = currentPlayer?.injurySeverity
+            || injurySeverityFromEvent(injuryEvent);
+
+        return {
+            name: player.info.name,
+            number: player.info.number,
+            position: currentPlayer?.roleName || Position[player.position],
+            onPitch: Boolean(currentPlayer),
+            appeared,
+            stamina: currentPlayer ? Math.round(currentPlayer.stamina) : null,
+            passesAttempted: primaryEvents.filter((event) => event.type === 'pass').length,
+            passesCompleted: events.filter((event) => (
+                event.type === 'receive' && samePlayer(event.secondaryPlayer, player)
+            )).length,
+            defensiveActions: primaryEvents.filter((event) => (
+                ['tackle', 'interception', 'save', 'goalkeeper_claim', 'blocked_shot'].includes(event.type)
+            )).length,
+            shots: primaryEvents.filter((event) => event.type === 'shot').length,
+            goals: primaryEvents.filter((event) => event.type === 'goal').length,
+            yellowCards: currentPlayer?.yellowCards ?? yellowCards,
+            redCard: currentPlayer?.redCard
+                || primaryEvents.some((event) => event.type === 'red_card'),
+            injurySeverity,
+        };
+    });
+}
+
 export function formatTime(seconds: number): string {
     const minutes = Math.floor(seconds / 60);
     const remainder = Math.floor(seconds % 60);
 
     return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+}
+
+function samePlayer(eventPlayer: Player | undefined, player: Player): boolean {
+    return eventPlayer?.info.number === player.info.number
+        && eventPlayer.info.name === player.info.name;
+}
+
+function injurySeverityFromEvent(event?: RealTimeMatchEvent): SquadPlayerStats['injurySeverity'] {
+    if (event?.outcome && ['knock', 'minor', 'forced'].includes(event.outcome)) {
+        return event.outcome as SquadPlayerStats['injurySeverity'];
+    }
+
+    return 'none';
 }
 
 export function formatScoreSheet(events: RealTimeMatchEvent[]): RealTimeMatchEvent[] {

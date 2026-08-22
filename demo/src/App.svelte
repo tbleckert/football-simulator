@@ -7,6 +7,7 @@
         TacticalStyle,
     } from '$simulator/RealTimeEngine.ts';
     import Pitch from './Pitch.svelte';
+    import SquadView from './SquadView.svelte';
     import {
         createSimulation,
         eventsUntil,
@@ -14,6 +15,7 @@
         formatTime,
         homeStartingTactics,
         reportFor,
+        squadStats,
         tacticalPresets,
         type ScheduledTacticalChange,
         type Simulation,
@@ -63,6 +65,7 @@
     let tacticsOpen = false;
     let draftStyle: TacticalStyle = homeStartingTactics.style;
     let draftFormation = homeStartingTactics.formation;
+    let tacticsView: 'plan' | 'squad' = 'plan';
 
     $: snapshot = snapshots[index] as MatchSnapshot;
     $: elapsedEvents = eventsUntil(events, snapshot);
@@ -73,6 +76,7 @@
         || snapshot.players[0];
     $: notableEvents = elapsedEvents.filter((event) => featuredEventTypes.has(event.type));
     $: recentEvents = (notableEvents.length ? notableEvents : elapsedEvents).slice(-3).reverse();
+    $: controlledSquad = squadStats(simulation.homeTeam.players, snapshot, elapsedEvents, 'home');
     $: possessionTotal = report.home.possession + report.away.possession;
     $: homePossession = snapshot.time > 0 && possessionTotal > 0
         ? report.home.possession / possessionTotal
@@ -125,6 +129,7 @@
         tacticsOpen = false;
         draftStyle = homeStartingTactics.style;
         draftFormation = homeStartingTactics.formation;
+        tacticsView = 'plan';
     }
 
     function scrub(): void {
@@ -246,6 +251,7 @@
         playing = false;
         draftStyle = activeTactics.style;
         draftFormation = activeTactics.formation;
+        tacticsView = 'plan';
         tacticsOpen = true;
     }
 
@@ -339,8 +345,14 @@
             speed,
             seed: simulation.seed,
             score: snapshot.score,
+            controlledTeam: {
+                side: 'home',
+                name: simulation.homeTeam.name,
+                abbreviation: teamAbbreviation(simulation.homeTeam.name),
+            },
             tactics: {
                 open: tacticsOpen,
+                view: tacticsView,
                 home: activeTactics,
                 changes: tacticalChanges.map((change) => ({
                     at: change.at,
@@ -348,6 +360,19 @@
                     formation: change.tactics.formation,
                 })),
             },
+            squad: tacticsOpen && tacticsView === 'squad'
+                ? controlledSquad.map((player) => ({
+                    name: player.name,
+                    number: player.number,
+                    position: player.position,
+                    onPitch: player.onPitch,
+                    stamina: player.stamina,
+                    passes: [player.passesCompleted, player.passesAttempted],
+                    defensiveActions: player.defensiveActions,
+                    shots: player.shots,
+                    goals: player.goals,
+                }))
+                : undefined,
             ball: snapshot.ball,
             selectedPlayer: selectedPlayer
                 ? {
@@ -411,6 +436,9 @@
     <div class="game-board">
         <section class="panel pitch-panel" aria-label="Live match pitch">
             <Pitch {snapshot} {selectedPlayerId} on:selectPlayer={selectPlayer} />
+            <div class="pitch-team-label" aria-label="You control Juventus">
+                <i></i><span>Your team · JUV</span>
+            </div>
         </section>
 
         <aside class="panel match-rail" aria-label="Live match score and events">
@@ -419,10 +447,16 @@
                 <small>{snapshot.period === 'ended' ? 'Match complete' : `Period ${snapshot.period}`}</small>
             </div>
 
-            <div class="scoreline" aria-label={`${simulation.homeTeam.name} ${snapshot.score.home}, ${simulation.awayTeam.name} ${snapshot.score.away}`}>
-                <span>{teamAbbreviation(simulation.homeTeam.name)}</span>
+            <div class="scoreline" aria-label={`You control ${simulation.homeTeam.name}. ${simulation.homeTeam.name} ${snapshot.score.home}, ${simulation.awayTeam.name} ${snapshot.score.away}`}>
+                <span class="score-team controlled-score-team">
+                    <small>Your team</small>
+                    <b>{teamAbbreviation(simulation.homeTeam.name)}</b>
+                </span>
                 <strong>{snapshot.score.home} — {snapshot.score.away}</strong>
-                <span>{teamAbbreviation(simulation.awayTeam.name)}</span>
+                <span class="score-team opponent-score-team">
+                    <small>Opponent</small>
+                    <b>{teamAbbreviation(simulation.awayTeam.name)}</b>
+                </span>
             </div>
 
             <div class="phase"><span></span>{phaseLabel(snapshot.phase)}</div>
@@ -576,7 +610,7 @@
                 disabled={snapshot.period === 'ended'}
                 on:click={openTactics}
             >
-                <span class="tactics-prefix">Tactics ·&nbsp;</span>{tacticalPresets[activeTactics.style].label} <kbd>T</kbd>
+                <span class="tactics-prefix">JUV tactics ·&nbsp;</span>{tacticalPresets[activeTactics.style].label} <kbd>T</kbd>
             </button>
             <span class="control-divider seed-divider"></span>
             <span class="seed">Seed {String(simulation.seed).padStart(10, '0')}</span>
@@ -596,13 +630,32 @@
             >
                 <header class="tactics-header">
                     <div>
-                        <span>JUV · {formatTime(snapshot.time)}</span>
-                        <h2 id="tactics-title">Tactical board</h2>
+                        <span>Your team · JUV · {formatTime(snapshot.time)}</span>
+                        <h2 id="tactics-title">{tacticsView === 'plan' ? 'Tactical board' : 'Match squad'}</h2>
                     </div>
-                    <button type="button" class="close-tactics" aria-label="Close tactics" on:click={closeTactics}>×</button>
+                    <div class="tactics-header-actions">
+                        <div class="tactics-tabs" role="tablist" aria-label="Tactical board view">
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={tacticsView === 'plan'}
+                                class:active={tacticsView === 'plan'}
+                                on:click={() => tacticsView = 'plan'}
+                            >Plan</button>
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={tacticsView === 'squad'}
+                                class:active={tacticsView === 'squad'}
+                                on:click={() => tacticsView = 'squad'}
+                            >Squad · 22</button>
+                        </div>
+                        <button type="button" class="close-tactics" aria-label="Close tactics" on:click={closeTactics}>×</button>
+                    </div>
                 </header>
 
-                <div class="tactics-layout">
+                {#if tacticsView === 'plan'}
+                    <div class="tactics-layout">
                     <div class="tactics-styles" role="group" aria-label="Tactical style">
                         {#each tacticalStyles as style, styleIndex}
                             <button
@@ -656,7 +709,10 @@
                             {tacticalDraftChanged ? `Apply at ${formatTime(snapshot.time)}` : 'Current setup'}
                         </button>
                     </aside>
-                </div>
+                    </div>
+                {:else}
+                    <SquadView players={controlledSquad} />
+                {/if}
             </div>
         </div>
     {/if}

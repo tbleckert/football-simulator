@@ -83,3 +83,29 @@ Original prompt: Very good! I guess only thing missing is the possibility to cha
 ## Tactical-control TODO
 
 - None.
+
+---
+
+## Current objective: team ownership and squad context
+
+Original prompt: Very nice! Two things: 1. It's not clear which team you control 2. You can't see your squad and stats, so it's hard to decide on tactics
+
+## Squad-context progress
+
+- Chose Juventus as the explicit controlled side, matching the existing home-team tactical branch.
+- Added persistent `Your team · JUV` treatment to the pitch, scoreline, tactical control, and tactical-board header.
+- Added Plan/Squad tabs to the tactical board, with separate on-pitch and off-pitch groups.
+- The squad view derives live status and statistics from the displayed snapshot and elapsed event stream so it remains honest when scrubbing or branching the match.
+- Added current position, fitness, completed/attempted passes, defensive actions, shots, goals, cards, and injuries for every Juventus player.
+- Browser QA confirmed the live squad populated during play, reset to the kickoff state when rewound, and finished with 10 on-pitch players and 12 off-pitch players after a red card.
+- Confirmed the 390px squad sheet has no horizontal overflow and keeps both groups independently scrollable.
+- The required web-game Playwright client captured the controlled-team treatment and tactical board with matching `render_game_to_text` state and no console-error artifact.
+
+## Squad-context verification
+
+- Passed `npm run typecheck`, `npm test`, `npm run build`, `npm run demo:build`, and `git diff --check`.
+- Browser console remained clean.
+
+## Squad-context TODO
+
+- None.
