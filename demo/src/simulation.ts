@@ -338,8 +338,8 @@ export function createSimulation(
     seed = randomSeed(),
     tacticalChanges: ScheduledTacticalChange[] = [],
 ): Simulation {
-    const homeTeam = createTeam(true, 'Juventus', homePlayers);
-    const awayTeam = createTeam(false, 'Milan', awayPlayers);
+    const homeTeam = createTeam(true, 'Asteria FC', homePlayers);
+    const awayTeam = createTeam(false, 'Rookhaven Athletic', awayPlayers);
     const engine = new RealTimeEngine(homeTeam, awayTeam, {
         random: seededRandom(seed),
         homeTactics: homeStartingTactics,

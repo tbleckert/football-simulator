@@ -109,3 +109,26 @@ Original prompt: Very nice! Two things: 1. It's not clear which team you control
 ## Squad-context TODO
 
 - None.
+
+---
+
+## Current objective: fictional club identities
+
+Original prompt: Very nice! Let's also not name them Juventus and Milan. Come up with our own names
+
+## Club-identity progress
+
+- Renamed the controlled side to Asteria FC (`AST`) and the opponent to Rookhaven Athletic (`ROO`).
+- Replaced hard-coded abbreviations in the pitch badge, scoreline, tactical controls, tactical events, tactical-board header, accessibility labels, and `render_game_to_text` with values derived from the simulation teams.
+- Browser QA confirmed `AST` and `ROO` across the live board, the tactical sheet, and an applied `AST switch · Balanced` event.
+- The required web-game client screenshot and text state agree on Asteria FC (`AST`) as the controlled team, with no console-error artifact.
+- Confirmed the full accessible score reads Asteria FC versus Rookhaven Athletic and the 390px layout has no horizontal overflow.
+
+## Club-identity verification
+
+- Passed `npm run typecheck`, `npm test`, `npm run build`, `npm run demo:build`, and `git diff --check`.
+- Browser console remained clean.
+
+## Club-identity TODO
+
+- None.

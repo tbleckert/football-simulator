@@ -77,6 +77,8 @@
     $: notableEvents = elapsedEvents.filter((event) => featuredEventTypes.has(event.type));
     $: recentEvents = (notableEvents.length ? notableEvents : elapsedEvents).slice(-3).reverse();
     $: controlledSquad = squadStats(simulation.homeTeam.players, snapshot, elapsedEvents, 'home');
+    $: homeAbbreviation = teamAbbreviation(simulation.homeTeam.name);
+    $: awayAbbreviation = teamAbbreviation(simulation.awayTeam.name);
     $: possessionTotal = report.home.possession + report.away.possession;
     $: homePossession = snapshot.time > 0 && possessionTotal > 0
         ? report.home.possession / possessionTotal
@@ -171,7 +173,7 @@
                 ? tacticalPresets[style].label
                 : 'New instructions';
 
-            return `JUV switch · ${label}`;
+            return `${homeAbbreviation} switch · ${label}`;
         }
 
         if (event.type === 'substitution') {
@@ -348,7 +350,7 @@
             controlledTeam: {
                 side: 'home',
                 name: simulation.homeTeam.name,
-                abbreviation: teamAbbreviation(simulation.homeTeam.name),
+                abbreviation: homeAbbreviation,
             },
             tactics: {
                 open: tacticsOpen,
@@ -436,8 +438,8 @@
     <div class="game-board">
         <section class="panel pitch-panel" aria-label="Live match pitch">
             <Pitch {snapshot} {selectedPlayerId} on:selectPlayer={selectPlayer} />
-            <div class="pitch-team-label" aria-label="You control Juventus">
-                <i></i><span>Your team · JUV</span>
+            <div class="pitch-team-label" aria-label={`You control ${simulation.homeTeam.name}`}>
+                <i></i><span>Your team · {homeAbbreviation}</span>
             </div>
         </section>
 
@@ -450,12 +452,12 @@
             <div class="scoreline" aria-label={`You control ${simulation.homeTeam.name}. ${simulation.homeTeam.name} ${snapshot.score.home}, ${simulation.awayTeam.name} ${snapshot.score.away}`}>
                 <span class="score-team controlled-score-team">
                     <small>Your team</small>
-                    <b>{teamAbbreviation(simulation.homeTeam.name)}</b>
+                    <b>{homeAbbreviation}</b>
                 </span>
                 <strong>{snapshot.score.home} — {snapshot.score.away}</strong>
                 <span class="score-team opponent-score-team">
                     <small>Opponent</small>
-                    <b>{teamAbbreviation(simulation.awayTeam.name)}</b>
+                    <b>{awayAbbreviation}</b>
                 </span>
             </div>
 
@@ -610,7 +612,7 @@
                 disabled={snapshot.period === 'ended'}
                 on:click={openTactics}
             >
-                <span class="tactics-prefix">JUV tactics ·&nbsp;</span>{tacticalPresets[activeTactics.style].label} <kbd>T</kbd>
+                <span class="tactics-prefix">{homeAbbreviation} tactics ·&nbsp;</span>{tacticalPresets[activeTactics.style].label} <kbd>T</kbd>
             </button>
             <span class="control-divider seed-divider"></span>
             <span class="seed">Seed {String(simulation.seed).padStart(10, '0')}</span>
@@ -630,7 +632,7 @@
             >
                 <header class="tactics-header">
                     <div>
-                        <span>Your team · JUV · {formatTime(snapshot.time)}</span>
+                        <span>Your team · {homeAbbreviation} · {formatTime(snapshot.time)}</span>
                         <h2 id="tactics-title">{tacticsView === 'plan' ? 'Tactical board' : 'Match squad'}</h2>
                     </div>
                     <div class="tactics-header-actions">
