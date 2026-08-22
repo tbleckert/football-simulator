@@ -1,13 +1,21 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import type { MatchSnapshot, RealTimeMatchEvent } from '$simulator/RealTimeEngine.ts';
+    import type {
+        MatchSnapshot,
+        RealTimeMatchEvent,
+        Tactics,
+        TacticalStyle,
+    } from '$simulator/RealTimeEngine.ts';
     import Pitch from './Pitch.svelte';
     import {
         createSimulation,
         eventsUntil,
         formatScoreSheet,
         formatTime,
+        homeStartingTactics,
         reportFor,
+        tacticalPresets,
+        type ScheduledTacticalChange,
         type Simulation,
     } from './simulation';
 
@@ -27,7 +35,18 @@
         'red_card',
         'substitution',
         'foul',
+        'tactical_change',
     ]);
+
+    const tacticalStyles: TacticalStyle[] = [
+        'balanced',
+        'possession',
+        'direct',
+        'counter',
+        'low_block',
+        'high_press',
+    ];
+    const formations = ['4-4-2', '4-3-3', '4-2-3-1'];
 
     let simulation: Simulation = createSimulation();
     let snapshots = simulation.snapshots;
@@ -40,6 +59,10 @@
     let frameHandle = 0;
     let selectedPlayerId = '';
     let isFullscreen = false;
+    let tacticalChanges: ScheduledTacticalChange[] = [];
+    let tacticsOpen = false;
+    let draftStyle: TacticalStyle = homeStartingTactics.style;
+    let draftFormation = homeStartingTactics.formation;
 
     $: snapshot = snapshots[index] as MatchSnapshot;
     $: elapsedEvents = eventsUntil(events, snapshot);
@@ -56,6 +79,13 @@
         : 0.5;
     $: momentumEvents = elapsedEvents.filter((event) => event.teamSide).slice(-22);
     $: timelineEndTime = snapshots[snapshots.length - 1]?.time || simulation.engine.matchLengthSeconds;
+    $: activeTactics = tacticsAt(snapshot.time);
+    $: draftPreset = tacticalPresets[draftStyle];
+    $: draftTactics = draftStyle === activeTactics.style
+        ? activeTactics
+        : { formation: draftFormation, ...draftPreset.tactics };
+    $: tacticalDraftChanged = draftStyle !== activeTactics.style
+        || draftFormation !== activeTactics.formation;
     $: intentTarget = selectedPlayer
         ? {
             x: clamp(30, 88, 54 + (selectedPlayer.currentIntent.target.x - selectedPlayer.x) * 1.35),
@@ -65,6 +95,16 @@
 
     function clamp(minimum: number, maximum: number, value: number): number {
         return Math.min(maximum, Math.max(minimum, value));
+    }
+
+    function tacticsAt(time: number): Tactics {
+        const changes = tacticalChanges.filter((change) => change.side === 'home' && change.at <= time);
+        const latestChange = changes[changes.length - 1];
+
+        return {
+            ...homeStartingTactics,
+            ...latestChange?.tactics,
+        };
     }
 
     function togglePlay(): void {
@@ -81,6 +121,10 @@
         playing = false;
         lastFrameTime = 0;
         selectedPlayerId = '';
+        tacticalChanges = [];
+        tacticsOpen = false;
+        draftStyle = homeStartingTactics.style;
+        draftFormation = homeStartingTactics.formation;
     }
 
     function scrub(): void {
@@ -116,6 +160,15 @@
     }
 
     function eventLabel(event: RealTimeMatchEvent): string {
+        if (event.type === 'tactical_change') {
+            const style = event.outcome?.replace('manager_', '') as TacticalStyle | undefined;
+            const label = style && tacticalPresets[style]
+                ? tacticalPresets[style].label
+                : 'New instructions';
+
+            return `JUV switch · ${label}`;
+        }
+
         if (event.type === 'substitution') {
             return `${event.secondaryPlayer?.info.name || 'Player'} → ${event.player?.info.name || 'Substitute'}`;
         }
@@ -129,6 +182,10 @@
     }
 
     function eventDetail(event: RealTimeMatchEvent): string {
+        if (event.type === 'tactical_change') {
+            return tacticsAt(event.time).formation;
+        }
+
         if (event.chanceQuality !== undefined) {
             return `${Math.round(event.chanceQuality * 100)}% chance`;
         }
@@ -181,6 +238,54 @@
         playing = false;
     }
 
+    function openTactics(): void {
+        if (snapshot.period === 'ended') {
+            return;
+        }
+
+        playing = false;
+        draftStyle = activeTactics.style;
+        draftFormation = activeTactics.formation;
+        tacticsOpen = true;
+    }
+
+    function closeTactics(): void {
+        tacticsOpen = false;
+    }
+
+    function applyTactics(): void {
+        if (!tacticalDraftChanged || snapshot.period === 'ended') {
+            closeTactics();
+            return;
+        }
+
+        const decisionTime = snapshot.time;
+        const seed = simulation.seed;
+        const nextTactics: Tactics = {
+            ...draftTactics,
+            formation: draftFormation,
+        };
+
+        tacticalChanges = [
+            ...tacticalChanges.filter((change) => change.side !== 'home' || change.at < decisionTime),
+            {
+                at: decisionTime,
+                side: 'home',
+                tactics: nextTactics,
+                reason: `manager_${draftStyle}`,
+            },
+        ];
+
+        simulation = createSimulation(seed, tacticalChanges);
+        snapshots = simulation.snapshots;
+        events = simulation.events;
+        index = snapshotIndexAt(decisionTime + simulation.engine.tickSeconds);
+        preciseIndex = index;
+        playing = false;
+        lastFrameTime = 0;
+        tacticsOpen = false;
+    }
+
     function selectPlayer(event: CustomEvent<{ id: string }>): void {
         selectedPlayerId = event.detail.id;
     }
@@ -196,6 +301,11 @@
 
     function handleKeydown(event: KeyboardEvent): void {
         const target = event.target as HTMLElement | null;
+
+        if (event.key === 'Escape' && tacticsOpen) {
+            closeTactics();
+            return;
+        }
 
         if (target?.matches('button, input, select, textarea')) {
             return;
@@ -213,6 +323,10 @@
         if (event.key.toLowerCase() === 'f') {
             void toggleFullscreen();
         }
+
+        if (event.key.toLowerCase() === 't') {
+            tacticsOpen ? closeTactics() : openTactics();
+        }
     }
 
     function renderGameToText(): string {
@@ -225,6 +339,15 @@
             speed,
             seed: simulation.seed,
             score: snapshot.score,
+            tactics: {
+                open: tacticsOpen,
+                home: activeTactics,
+                changes: tacticalChanges.map((change) => ({
+                    at: change.at,
+                    style: change.tactics.style,
+                    formation: change.tactics.formation,
+                })),
+            },
             ball: snapshot.ball,
             selectedPlayer: selectedPlayer
                 ? {
@@ -446,10 +569,95 @@
                 </select>
             </label>
             <span class="control-divider"></span>
+            <button
+                id="tactics-button"
+                type="button"
+                class="tactics-control"
+                disabled={snapshot.period === 'ended'}
+                on:click={openTactics}
+            >
+                <span class="tactics-prefix">Tactics ·&nbsp;</span>{tacticalPresets[activeTactics.style].label} <kbd>T</kbd>
+            </button>
+            <span class="control-divider seed-divider"></span>
             <span class="seed">Seed {String(simulation.seed).padStart(10, '0')}</span>
             <button type="button" class="fullscreen-control" on:click={() => void toggleFullscreen()}>
                 {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} <kbd>F</kbd>
             </button>
         </footer>
     </div>
+
+    {#if tacticsOpen}
+        <div class="tactics-backdrop">
+            <div
+                class="panel tactics-panel"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="tactics-title"
+            >
+                <header class="tactics-header">
+                    <div>
+                        <span>JUV · {formatTime(snapshot.time)}</span>
+                        <h2 id="tactics-title">Tactical board</h2>
+                    </div>
+                    <button type="button" class="close-tactics" aria-label="Close tactics" on:click={closeTactics}>×</button>
+                </header>
+
+                <div class="tactics-layout">
+                    <div class="tactics-styles" role="group" aria-label="Tactical style">
+                        {#each tacticalStyles as style, styleIndex}
+                            <button
+                                type="button"
+                                class:active={draftStyle === style}
+                                aria-pressed={draftStyle === style}
+                                on:click={() => draftStyle = style}
+                            >
+                                <small>0{styleIndex + 1}</small>
+                                <strong>{tacticalPresets[style].label}</strong>
+                                <span>{tacticalPresets[style].note}</span>
+                            </button>
+                        {/each}
+                    </div>
+
+                    <aside class="tactics-preview" aria-label="Tactical preview">
+                        <div class="formation-selector" role="group" aria-label="Formation">
+                            {#each formations as formation}
+                                <button
+                                    type="button"
+                                    class:active={draftFormation === formation}
+                                    aria-pressed={draftFormation === formation}
+                                    on:click={() => draftFormation = formation}
+                                >{formation}</button>
+                            {/each}
+                        </div>
+
+                        <strong class="formation-display">{draftFormation}</strong>
+
+                        <div class="tactical-metrics">
+                            <div>
+                                <span>Press <b>{draftTactics.press}</b></span>
+                                <i><span style:width={`${draftTactics.press}%`}></span></i>
+                            </div>
+                            <div>
+                                <span>Tempo <b>{draftTactics.tempo}</b></span>
+                                <i><span style:width={`${draftTactics.tempo}%`}></span></i>
+                            </div>
+                            <div>
+                                <span>Line <b>{draftTactics.defensiveLine}</b></span>
+                                <i><span style:width={`${draftTactics.defensiveLine}%`}></span></i>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="apply-tactics"
+                            disabled={!tacticalDraftChanged}
+                            on:click={applyTactics}
+                        >
+                            {tacticalDraftChanged ? `Apply at ${formatTime(snapshot.time)}` : 'Current setup'}
+                        </button>
+                    </aside>
+                </div>
+            </div>
+        </div>
+    {/if}
 </main>

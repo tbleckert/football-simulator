@@ -57,3 +57,29 @@ Original prompt: I'm sold. Let's build the game. Feel free to use three-js if it
 - Confirmed goal jumps, timeline scrubbing, player selection, playback, seeded match resets, and fullscreen controls against `render_game_to_text` state.
 - Ran the required web-game Playwright client after the final interaction fix; its screenshot and paused simulation state agree, with no console-error artifact.
 - Passed `npm run typecheck`, `npm test`, `npm run build`, `npm run demo:build`, and `git diff --check`.
+
+---
+
+## Current objective: live tactics
+
+Original prompt: Very good! I guess only thing missing is the possibility to change tactics?
+
+## Tactical-control progress
+
+- Confirmed the engine already supports meaningful mid-match tactical and formation changes through `applyTacticalChange`.
+- The demo precomputes its full timeline, so the UI needs to rebuild the deterministic branch from the displayed match time when the manager applies a change; a cosmetic selector would not be sufficient.
+- Added deterministic scheduled tactical changes to the demo simulation helper.
+- Added an editorial tactical board with six styles, three formations, live Press/Tempo/Line previews, a compact control-bar entry point, and keyboard/Escape handling.
+- Applying a change pauses the game, records a real `tactical_change` event, preserves the current seed and score, and recalculates only the future branch.
+- Browser QA changed Juventus at 23:59 to Counter in a 4-2-3-1, then scrubbed back to prove the score, ball, and all 22 player positions exactly matched the original history at the decision frame.
+- Confirmed the 390px tactical sheet fits within the viewport without horizontal overflow.
+- The required web-game Playwright client captured the open tactical board and matching `render_game_to_text` state with no console-error artifact.
+
+## Tactical-control verification
+
+- Passed `npm run typecheck`, `npm test`, `npm run build`, `npm run demo:build`, and `git diff --check`.
+- Browser console remained clean; no generated QA artifacts remain in the worktree.
+
+## Tactical-control TODO
+
+- None.

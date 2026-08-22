@@ -2,6 +2,8 @@ import Player, { type PlayerAttributes } from '$simulator/Player.ts';
 import RealTimeEngine, {
     type MatchSnapshot,
     type RealTimeMatchEvent,
+    type Tactics,
+    type TacticalStyle,
     type TeamSide,
 } from '$simulator/RealTimeEngine.ts';
 import Team from '$simulator/Team.ts';
@@ -63,6 +65,130 @@ export interface Simulation {
     events: RealTimeMatchEvent[];
     seed: number;
 }
+
+export interface ScheduledTacticalChange {
+    at: number;
+    side: TeamSide;
+    tactics: Partial<Tactics>;
+    reason: string;
+}
+
+export interface TacticalPreset {
+    label: string;
+    note: string;
+    tactics: Omit<Tactics, 'formation'>;
+}
+
+export const homeStartingTactics: Tactics = {
+    formation: '4-4-2',
+    style: 'high_press',
+    press: 62,
+    width: 58,
+    tempo: 66,
+    mentality: 'attacking',
+    defensiveLine: 70,
+    compactness: 48,
+    focus: 'wide',
+};
+
+export const awayStartingTactics: Tactics = {
+    formation: '4-3-3',
+    style: 'possession',
+    press: 48,
+    width: 52,
+    tempo: 42,
+    mentality: 'balanced',
+    defensiveLine: 56,
+    compactness: 58,
+    focus: 'central',
+};
+
+export const tacticalPresets: Record<TacticalStyle, TacticalPreset> = {
+    balanced: {
+        label: 'Balanced',
+        note: 'Hold the structure',
+        tactics: {
+            style: 'balanced',
+            press: 50,
+            width: 55,
+            tempo: 50,
+            mentality: 'balanced',
+            defensiveLine: 50,
+            compactness: 50,
+            focus: 'balanced',
+        },
+    },
+    possession: {
+        label: 'Keep ball',
+        note: 'Patient and central',
+        tactics: {
+            style: 'possession',
+            press: 56,
+            width: 54,
+            tempo: 42,
+            mentality: 'balanced',
+            defensiveLine: 56,
+            compactness: 58,
+            focus: 'central',
+        },
+    },
+    direct: {
+        label: 'Go direct',
+        note: 'Early, vertical play',
+        tactics: {
+            style: 'direct',
+            press: 46,
+            width: 52,
+            tempo: 72,
+            mentality: 'balanced',
+            defensiveLine: 48,
+            compactness: 46,
+            focus: 'balanced',
+        },
+    },
+    counter: {
+        label: 'Counter',
+        note: 'Sit, then break',
+        tactics: {
+            style: 'counter',
+            press: 38,
+            width: 48,
+            tempo: 62,
+            mentality: 'defensive',
+            defensiveLine: 38,
+            compactness: 60,
+            focus: 'central',
+        },
+    },
+    low_block: {
+        label: 'Protect lead',
+        note: 'Compact and deep',
+        tactics: {
+            style: 'low_block',
+            press: 28,
+            width: 42,
+            tempo: 36,
+            mentality: 'defensive',
+            defensiveLine: 28,
+            compactness: 76,
+            focus: 'central',
+        },
+    },
+    high_press: {
+        label: 'Press high',
+        note: 'Win it near goal',
+        tactics: {
+            style: 'high_press',
+            press: 82,
+            width: 58,
+            tempo: 68,
+            mentality: 'attacking',
+            defensiveLine: 72,
+            compactness: 46,
+            focus: 'balanced',
+        },
+    },
+};
 
 interface DemoPlayerDefinition {
     name: string;
@@ -191,36 +317,34 @@ const possessionEventTypes = new Set([
     'goalkeeper_claim',
 ]);
 
-export function createSimulation(seed = randomSeed()): Simulation {
+export function createSimulation(
+    seed = randomSeed(),
+    tacticalChanges: ScheduledTacticalChange[] = [],
+): Simulation {
     const homeTeam = createTeam(true, 'Juventus', homePlayers);
     const awayTeam = createTeam(false, 'Milan', awayPlayers);
     const engine = new RealTimeEngine(homeTeam, awayTeam, {
         random: seededRandom(seed),
-        homeTactics: {
-            formation: '4-4-2',
-            style: 'high_press',
-            press: 62,
-            width: 58,
-            tempo: 66,
-            mentality: 'attacking',
-            defensiveLine: 70,
-            compactness: 48,
-            focus: 'wide',
-        },
-        awayTactics: {
-            formation: '4-3-3',
-            style: 'possession',
-            press: 48,
-            width: 52,
-            tempo: 42,
-            mentality: 'balanced',
-            defensiveLine: 56,
-            compactness: 58,
-            focus: 'central',
-        },
+        homeTactics: homeStartingTactics,
+        awayTactics: awayStartingTactics,
     });
 
-    const snapshots = engine.simulate();
+    const changes = [...tacticalChanges].sort((first, second) => first.at - second.at);
+    let nextChangeIndex = 0;
+
+    engine.start();
+
+    while (engine.state.period !== 'ended') {
+        while (changes[nextChangeIndex]?.at <= engine.state.time) {
+            const change = changes[nextChangeIndex];
+            engine.applyTacticalChange(change.side, change.tactics, change.reason);
+            nextChangeIndex += 1;
+        }
+
+        engine.tick();
+    }
+
+    const snapshots = engine.snapshots;
 
     return {
         engine,

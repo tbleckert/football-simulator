@@ -54,6 +54,11 @@ button {
     cursor: pointer;
 }
 
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
+}
+
 button:focus-visible,
 select:focus-visible,
 input:focus-visible {
@@ -897,6 +902,249 @@ kbd {
     font-size: 0.62rem;
 }
 
+.tactics-control {
+    white-space: nowrap;
+}
+
+.tactics-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(8, 8, 8, 0.58);
+    opacity: 1;
+    backdrop-filter: blur(2px);
+    transition: opacity 160ms var(--ease-out);
+}
+
+.tactics-panel {
+    width: min(58rem, calc(100vw - 2rem));
+    max-height: calc(100dvh - 2rem);
+    padding: 1.35rem;
+    overflow-y: auto;
+    border: 2px solid var(--ink);
+    border-radius: 1.6rem;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+
+@starting-style {
+    .tactics-backdrop {
+        opacity: 0;
+    }
+
+    .tactics-panel {
+        opacity: 0;
+        transform: translateY(1rem) scale(0.98);
+    }
+}
+
+.tactics-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 0.1rem 0 1.1rem;
+    border-bottom: 2px solid var(--ink);
+}
+
+.tactics-header span,
+.tactics-styles small,
+.tactics-styles span,
+.tactical-metrics,
+.formation-selector {
+    font-family: var(--mono);
+    text-transform: uppercase;
+}
+
+.tactics-header span {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+}
+
+.tactics-header h2 {
+    margin-top: 0.18rem;
+    font-family: var(--display);
+    font-size: clamp(2.8rem, 6vw, 4.8rem);
+    font-weight: 400;
+    letter-spacing: -0.035em;
+    line-height: 0.9;
+    text-transform: uppercase;
+}
+
+.close-tactics {
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    aspect-ratio: 1;
+    padding: 0;
+    border: 1px solid var(--ink);
+    border-radius: 50%;
+    background: transparent;
+    font-size: 1.65rem;
+    line-height: 1;
+    transition: transform 140ms var(--ease-out), background-color 140ms ease, color 140ms ease;
+}
+
+.close-tactics:active {
+    transform: scale(0.96);
+}
+
+.tactics-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(17rem, 0.85fr);
+    gap: 0.55rem;
+    padding-top: 0.55rem;
+}
+
+.tactics-styles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+}
+
+.tactics-styles button {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    grid-template-rows: auto auto;
+    min-height: 6rem;
+    padding: 0.85rem;
+    border: 1px solid rgba(8, 8, 8, 0.22);
+    border-radius: 1rem;
+    background: var(--paper-muted);
+    color: var(--ink);
+    text-align: left;
+    transition: transform 140ms var(--ease-out), background-color 140ms ease, color 140ms ease;
+}
+
+.tactics-styles button:active {
+    transform: scale(0.98);
+}
+
+.tactics-styles button.active {
+    background: var(--ink);
+    color: var(--paper);
+}
+
+.tactics-styles small {
+    grid-row: 1 / 3;
+    padding-top: 0.18rem;
+    font-size: 0.62rem;
+}
+
+.tactics-styles strong {
+    align-self: end;
+    font-family: var(--display);
+    font-size: 1.8rem;
+    font-weight: 400;
+    letter-spacing: -0.025em;
+    line-height: 0.92;
+    text-transform: uppercase;
+}
+
+.tactics-styles span {
+    align-self: start;
+    margin-top: 0.35rem;
+    font-size: 0.58rem;
+    line-height: 1.3;
+}
+
+.tactics-preview {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 0.85rem;
+    border-radius: 1rem;
+    background: var(--mint);
+}
+
+.formation-selector {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.2rem;
+}
+
+.formation-selector button {
+    padding: 0.55rem 0.3rem;
+    border: 1px solid rgba(8, 8, 8, 0.24);
+    border-radius: 0.55rem;
+    background: transparent;
+    font-size: 0.6rem;
+    transition: transform 140ms var(--ease-out), background-color 140ms ease, color 140ms ease;
+}
+
+.formation-selector button:active {
+    transform: scale(0.97);
+}
+
+.formation-selector button.active {
+    background: var(--ink);
+    color: var(--paper);
+}
+
+.formation-display {
+    margin: 1.2rem 0 auto;
+    font-family: var(--display);
+    font-size: clamp(4rem, 8vw, 6.4rem);
+    font-weight: 400;
+    letter-spacing: -0.05em;
+    line-height: 0.86;
+}
+
+.tactical-metrics {
+    display: grid;
+    gap: 0.72rem;
+    margin: 1.25rem 0;
+    font-size: 0.62rem;
+}
+
+.tactical-metrics > div > span {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.28rem;
+}
+
+.tactical-metrics b {
+    font-weight: 700;
+}
+
+.tactical-metrics i {
+    display: block;
+    height: 0.35rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(8, 8, 8, 0.16);
+}
+
+.tactical-metrics i span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--ink);
+    transition: width 180ms var(--ease-out);
+}
+
+.apply-tactics {
+    width: 100%;
+    padding: 0.85rem 1rem;
+    border: 0;
+    border-radius: 0.7rem;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    transition: transform 140ms var(--ease-out), opacity 140ms ease;
+}
+
+.apply-tactics:active {
+    transform: scale(0.98);
+}
+
 @media (hover: hover) and (pointer: fine) {
     .player:hover {
         transform: translate(-50%, -50%) scale(1.16);
@@ -904,6 +1152,13 @@ kbd {
 
     .goal-marker:hover {
         transform: translate(-50%, -50%) scale(1.12);
+    }
+
+    .tactics-styles button:not(.active):hover,
+    .formation-selector button:not(.active):hover,
+    .close-tactics:hover {
+        background: var(--ink);
+        color: var(--paper);
     }
 }
 
@@ -980,8 +1235,34 @@ kbd {
     }
 
     .control-bar .seed,
-    .fullscreen-control {
+    .fullscreen-control,
+    .seed-divider {
         display: none;
+    }
+
+    .tactics-backdrop {
+        place-items: end center;
+        padding: 0.45rem;
+    }
+
+    .tactics-panel {
+        width: 100%;
+        max-height: calc(100dvh - 0.9rem);
+        padding: 1rem;
+        border-radius: 1.25rem;
+        transform-origin: bottom center;
+    }
+
+    .tactics-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .tactics-styles button {
+        min-height: 5.4rem;
+    }
+
+    .formation-display {
+        margin-top: 1rem;
     }
 }
 
@@ -1011,6 +1292,30 @@ kbd {
     .control-divider:nth-of-type(3),
     .control-bar label > span {
         display: none;
+    }
+
+    .control-bar {
+        gap: 0.35rem;
+        padding-inline: 0.65rem;
+    }
+
+    .tactics-prefix,
+    .tactics-control kbd {
+        display: none;
+    }
+
+    .tactics-header h2 {
+        font-size: 2.8rem;
+    }
+
+    .tactics-styles button {
+        grid-template-columns: 1.5rem 1fr;
+        min-height: 5rem;
+        padding: 0.7rem;
+    }
+
+    .tactics-styles strong {
+        font-size: 1.5rem;
     }
 }
 
