@@ -1,9 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import type { MatchSnapshot, RealTimeMatchEvent } from '$simulator/RealTimeEngine.ts';
-    import RealTimeReporter from '$simulator/RealTimeReporter.ts';
     import Pitch from './Pitch.svelte';
-    import TeamReport from './TeamReport.svelte';
     import {
         createSimulation,
         eventsUntil,
@@ -12,6 +10,24 @@
         reportFor,
         type Simulation,
     } from './simulation';
+
+    type GameWindow = Window & {
+        advanceTime?: (milliseconds: number) => void;
+        render_game_to_text?: () => string;
+    };
+
+    const featuredEventTypes = new Set([
+        'goal',
+        'shot',
+        'save',
+        'miss',
+        'blocked_shot',
+        'offside',
+        'yellow_card',
+        'red_card',
+        'substitution',
+        'foul',
+    ]);
 
     let simulation: Simulation = createSimulation();
     let snapshots = simulation.snapshots;
@@ -22,32 +38,38 @@
     let speed = 45;
     let lastFrameTime = 0;
     let frameHandle = 0;
-    let replayEndIndex: number | null = null;
-    let selectedGoalIndex = 0;
     let selectedPlayerId = '';
-    let eventFilter = 'all';
+    let isFullscreen = false;
 
     $: snapshot = snapshots[index] as MatchSnapshot;
     $: elapsedEvents = eventsUntil(events, snapshot);
     $: report = reportFor(events, snapshot, snapshots);
     $: goals = formatScoreSheet(elapsedEvents);
-    $: allGoals = formatScoreSheet(events);
-    $: selectedPlayer = snapshot.players.find((player) => player.id === selectedPlayerId) || snapshot.players.find((player) => player.id === snapshot.ball.ownerId);
-    $: filteredEvents = filterEvents(elapsedEvents, eventFilter);
-    $: recentShot = elapsedEvents.filter((event) => ['shot', 'goal', 'save', 'miss', 'blocked_shot', 'penalty'].includes(event.type)).slice(-1)[0];
-    $: shotEvents = elapsedEvents.filter((event) => event.type === 'shot');
-    $: passRouteEntries = Object.entries(report.match.passRoutes).sort((a, b) => b[1] - a[1]).slice(0, 6);
-    $: shotRouteEntries = Object.entries(report.match.shotRoutes).sort((a, b) => b[1] - a[1]).slice(0, 6);
-    $: matchStory = snapshot.period === 'ended' ? new RealTimeReporter(simulation.engine).getReport() : null;
+    $: selectedPlayer = snapshot.players.find((player) => player.id === selectedPlayerId)
+        || snapshot.players.find((player) => player.id === snapshot.ball.ownerId)
+        || snapshot.players[0];
+    $: notableEvents = elapsedEvents.filter((event) => featuredEventTypes.has(event.type));
+    $: recentEvents = (notableEvents.length ? notableEvents : elapsedEvents).slice(-3).reverse();
+    $: possessionTotal = report.home.possession + report.away.possession;
+    $: homePossession = snapshot.time > 0 && possessionTotal > 0
+        ? report.home.possession / possessionTotal
+        : 0.5;
+    $: momentumEvents = elapsedEvents.filter((event) => event.teamSide).slice(-22);
     $: timelineEndTime = snapshots[snapshots.length - 1]?.time || simulation.engine.matchLengthSeconds;
-    $: if (allGoals.length && selectedGoalIndex >= allGoals.length) {
-        selectedGoalIndex = allGoals.length - 1;
+    $: intentTarget = selectedPlayer
+        ? {
+            x: clamp(30, 88, 54 + (selectedPlayer.currentIntent.target.x - selectedPlayer.x) * 1.35),
+            y: clamp(10, 52, 30 + (selectedPlayer.currentIntent.target.y - selectedPlayer.y) * 0.8),
+        }
+        : { x: 78, y: 20 };
+
+    function clamp(minimum: number, maximum: number, value: number): number {
+        return Math.min(maximum, Math.max(minimum, value));
     }
 
     function togglePlay(): void {
         playing = !playing;
         lastFrameTime = 0;
-        replayEndIndex = null;
     }
 
     function newMatch(): void {
@@ -58,15 +80,28 @@
         preciseIndex = 0;
         playing = false;
         lastFrameTime = 0;
-        replayEndIndex = null;
-        selectedGoalIndex = 0;
         selectedPlayerId = '';
     }
 
     function scrub(): void {
         playing = false;
         preciseIndex = index;
-        replayEndIndex = null;
+    }
+
+    function advanceSimulation(deltaSeconds: number): void {
+        if (!playing) {
+            return;
+        }
+
+        preciseIndex += deltaSeconds * speed / simulation.engine.tickSeconds;
+        index = Math.min(snapshots.length - 1, Math.floor(preciseIndex));
+
+        if (
+            index >= snapshots.length - 1
+            || snapshots[index].period === 'ended'
+        ) {
+            playing = false;
+        }
     }
 
     function frame(now: number): void {
@@ -76,79 +111,49 @@
 
         const deltaSeconds = (now - lastFrameTime) / 1000;
         lastFrameTime = now;
-
-        if (playing) {
-            preciseIndex += deltaSeconds * speed / simulation.engine.tickSeconds;
-            index = Math.min(snapshots.length - 1, Math.floor(preciseIndex));
-
-            if (
-                index >= snapshots.length - 1
-                || snapshots[index].period === 'ended'
-                || (replayEndIndex !== null && index >= replayEndIndex)
-            ) {
-                playing = false;
-                replayEndIndex = null;
-            }
-        }
-
+        advanceSimulation(deltaSeconds);
         frameHandle = requestAnimationFrame(frame);
     }
 
-    onMount(() => {
-        frameHandle = requestAnimationFrame(frame);
-
-        return () => cancelAnimationFrame(frameHandle);
-    });
-
     function eventLabel(event: RealTimeMatchEvent): string {
-        const outcome = event.outcome ? ` · ${event.outcome.replace(/_/g, ' ')}` : '';
-
         if (event.type === 'substitution') {
-            const outgoing = event.secondaryPlayer?.info.name || 'Player';
-            const incoming = event.player?.info.name || 'Substitute';
+            return `${event.secondaryPlayer?.info.name || 'Player'} → ${event.player?.info.name || 'Substitute'}`;
+        }
 
-            return `substitution ${outgoing} → ${incoming}${outcome}`;
+        if (event.type === 'offside') {
+            return `${event.player?.info.name || 'Player'} caught offside`;
         }
 
         const player = event.player?.info.name || event.teamSide || 'Match';
+        return `${player} · ${event.type.replace(/_/g, ' ')}`;
+    }
 
-        if (event.type === 'offside') {
-            return `${player} caught offside`;
+    function eventDetail(event: RealTimeMatchEvent): string {
+        if (event.chanceQuality !== undefined) {
+            return `${Math.round(event.chanceQuality * 100)}% chance`;
         }
 
-        return `${event.type.replace(/_/g, ' ')} ${player}${outcome}`;
+        return (event.outcome || event.activeAttackPattern || 'match event').replace(/_/g, ' ');
     }
 
-    function formatPercent(value: number): string {
-        return `${Math.round(value * 100)}%`;
-    }
-
-    function formatDecimal(value: number): string {
-        return value.toFixed(1);
-    }
-
-    function restartLabel(type: string): string {
-        return type.replace(/_/g, ' ');
-    }
-
-    function diagnosticLabel(type: string | null | undefined): string {
-        return (type || 'none').replace(/_/g, ' ');
-    }
-
-    function formatChance(value: number | undefined): string {
-        return typeof value === 'number' ? value.toFixed(2) : '-';
-    }
-
-    function matchStatus(snapshot: MatchSnapshot): string {
-        if (snapshot.period === 'ended') {
+    function matchStatus(currentSnapshot: MatchSnapshot): string {
+        if (currentSnapshot.period === 'ended') {
             return 'Full time';
         }
 
-        if (snapshot.phase === 'half_time') {
+        if (currentSnapshot.phase === 'half_time') {
             return 'Half time';
         }
 
-        return snapshot.time > 0 ? formatTime(snapshot.time) : 'Start';
+        return currentSnapshot.time > 0 ? formatTime(currentSnapshot.time) : '00:00';
+    }
+
+    function phaseLabel(phase: MatchSnapshot['phase']): string {
+        return phase.replace(/_/g, ' ');
+    }
+
+    function teamAbbreviation(name: string): string {
+        return name.slice(0, 3).toUpperCase();
     }
 
     function pitchX(value: number): number {
@@ -159,420 +164,292 @@
         return value / 68 * 100;
     }
 
-    function filterEvents(source: RealTimeMatchEvent[], filter: string): RealTimeMatchEvent[] {
-        if (filter === 'goals') {
-            return source.filter((event) => event.type === 'goal');
-        }
-
-        if (filter === 'passes') {
-            return source.filter((event) => ['pass', 'receive', 'interception'].includes(event.type));
-        }
-
-        if (filter === 'shots') {
-            return source.filter((event) => ['shot', 'save', 'miss', 'goal', 'blocked_shot'].includes(event.type));
-        }
-
-        if (filter === 'second_balls') {
-            return source.filter((event) => ['second_ball', 'recovery', 'aerial_duel'].includes(event.type));
-        }
-
-        if (filter === 'set_pieces') {
-            return source.filter((event) => ['throw_in', 'corner', 'goal_kick', 'free_kick', 'penalty', 'offside'].includes(event.type));
-        }
-
-        if (filter === 'discipline') {
-            return source.filter((event) => ['foul', 'yellow_card', 'red_card'].includes(event.type));
-        }
-
-        if (filter === 'stoppages') {
-            return source.filter((event) => ['injury', 'substitution', 'half_time', 'full_time'].includes(event.type));
-        }
-
-        return source;
-    }
-
     function snapshotIndexAt(time: number): number {
         const foundIndex = snapshots.findIndex((candidate) => candidate.time >= time);
-
         return foundIndex >= 0 ? foundIndex : snapshots.length - 1;
     }
 
     function jumpToGoal(goalIndex: number): void {
-        const goal = allGoals[goalIndex];
+        const goal = goals[goalIndex];
 
         if (!goal) {
             return;
         }
 
-        selectedGoalIndex = goalIndex;
         index = snapshotIndexAt(goal.time);
         preciseIndex = index;
         playing = false;
-        replayEndIndex = null;
-    }
-
-    function jumpToNextGoal(): void {
-        if (!allGoals.length) {
-            return;
-        }
-
-        const nextIndex = allGoals.findIndex((goal) => goal.time > snapshot.time + 0.01);
-
-        jumpToGoal(nextIndex >= 0 ? nextIndex : 0);
-    }
-
-    function jumpToPreviousGoal(): void {
-        if (!allGoals.length) {
-            return;
-        }
-
-        const reversedIndex = allGoals
-            .slice()
-            .reverse()
-            .findIndex((goal) => goal.time < snapshot.time - 0.01);
-        const previousIndex = reversedIndex >= 0 ? allGoals.length - 1 - reversedIndex : allGoals.length - 1;
-
-        jumpToGoal(previousIndex);
-    }
-
-    function replayGoal(goal: RealTimeMatchEvent | undefined = allGoals[selectedGoalIndex] || allGoals[allGoals.length - 1]): void {
-        if (!goal) {
-            return;
-        }
-
-        const replayWindow = goal.replayWindow || {
-            startTime: Math.max(0, goal.time - 12),
-            endTime: Math.min(timelineEndTime, goal.time + 4),
-        };
-
-        index = snapshotIndexAt(replayWindow.startTime);
-        preciseIndex = index;
-        replayEndIndex = snapshotIndexAt(replayWindow.endTime);
-        selectedGoalIndex = allGoals.indexOf(goal);
-        playing = true;
-        lastFrameTime = 0;
     }
 
     function selectPlayer(event: CustomEvent<{ id: string }>): void {
         selectedPlayerId = event.detail.id;
     }
+
+    async function toggleFullscreen(): Promise<void> {
+        if (document.fullscreenElement) {
+            await document.exitFullscreen();
+            return;
+        }
+
+        await document.documentElement.requestFullscreen();
+    }
+
+    function handleKeydown(event: KeyboardEvent): void {
+        const target = event.target as HTMLElement | null;
+
+        if (target?.matches('button, input, select, textarea')) {
+            return;
+        }
+
+        if (event.code === 'Space') {
+            event.preventDefault();
+            togglePlay();
+        }
+
+        if (event.key.toLowerCase() === 'n') {
+            newMatch();
+        }
+
+        if (event.key.toLowerCase() === 'f') {
+            void toggleFullscreen();
+        }
+    }
+
+    function renderGameToText(): string {
+        return JSON.stringify({
+            coordinateSystem: 'Pitch origin is top-left; x runs 0-105 left-to-right and y runs 0-68 top-to-bottom.',
+            mode: playing ? 'playing' : 'paused',
+            time: snapshot.time,
+            period: snapshot.period,
+            phase: snapshot.phase,
+            speed,
+            seed: simulation.seed,
+            score: snapshot.score,
+            ball: snapshot.ball,
+            selectedPlayer: selectedPlayer
+                ? {
+                    id: selectedPlayer.id,
+                    name: selectedPlayer.playerName,
+                    number: selectedPlayer.playerNumber,
+                    teamSide: selectedPlayer.teamSide,
+                    x: selectedPlayer.x,
+                    y: selectedPlayer.y,
+                    intent: selectedPlayer.currentIntent.type,
+                    intentTarget: selectedPlayer.currentIntent.target,
+                }
+                : null,
+            visiblePlayers: snapshot.players.map((player) => ({
+                id: player.id,
+                teamSide: player.teamSide,
+                x: player.x,
+                y: player.y,
+            })),
+            recentEvents: recentEvents.map((event) => ({
+                time: event.time,
+                type: event.type,
+                teamSide: event.teamSide,
+                player: event.player?.info.name,
+            })),
+        });
+    }
+
+    onMount(() => {
+        const gameWindow = window as GameWindow;
+        gameWindow.render_game_to_text = renderGameToText;
+        gameWindow.advanceTime = (milliseconds: number) => advanceSimulation(milliseconds / 1000);
+
+        const updateFullscreen = () => {
+            isFullscreen = Boolean(document.fullscreenElement);
+        };
+
+        window.addEventListener('keydown', handleKeydown);
+        document.addEventListener('fullscreenchange', updateFullscreen);
+        frameHandle = requestAnimationFrame(frame);
+
+        return () => {
+            cancelAnimationFrame(frameHandle);
+            window.removeEventListener('keydown', handleKeydown);
+            document.removeEventListener('fullscreenchange', updateFullscreen);
+            delete gameWindow.render_game_to_text;
+            delete gameWindow.advanceTime;
+        };
+    });
 </script>
 
 <svelte:head>
-    <title>Football simulator example</title>
+    <title>Live match · Football simulator</title>
+    <meta
+        name="description"
+        content="A live, seeded football match simulation with player intent, match shape and event analysis."
+    >
 </svelte:head>
 
-<main>
-    <section class="scoreboard">
-        <button
-            type="button"
-            class="match-minute"
-            aria-label={playing ? 'Pause match' : 'Play match'}
-            on:click={togglePlay}
-        >
-            {matchStatus(snapshot)}
-        </button>
-        <div class="scores">
-            <span>{snapshot.score.home}</span>
-            <span>-</span>
-            <span>{snapshot.score.away}</span>
-        </div>
-        {#if goals.length}
-            <div class="score-sheet">
-                {#each goals as goal}
-                    <div class:away={goal.teamSide === 'away'} class="score-sheet__item">
-                        <span>{goal.player?.info.name}</span>
-                        <span>{Math.floor(goal.time / 60)}'</span>
-                    </div>
-                {/each}
-            </div>
-        {/if}
-    </section>
-
-    <section class="controls" aria-label="Match controls">
-        <button type="button" on:click={togglePlay}>{playing ? 'Pause' : 'Play'}</button>
-        <button type="button" on:click={newMatch}>New match</button>
-        <button type="button" on:click={jumpToPreviousGoal} disabled={!allGoals.length}>Previous goal</button>
-        <button type="button" on:click={jumpToNextGoal} disabled={!allGoals.length}>Next goal</button>
-        {#if snapshot.period === 'ended' && allGoals.length}
-            <button type="button" on:click={() => replayGoal()}>Replay goal</button>
-        {/if}
-        <label>
-            Speed
-            <select bind:value={speed}>
-                <option value={1}>1x</option>
-                <option value={5}>5x</option>
-                <option value={15}>15x</option>
-                <option value={45}>45x</option>
-                <option value={90}>90x</option>
-                <option value={180}>180x</option>
-            </select>
-        </label>
-        <label>
-            Events
-            <select bind:value={eventFilter}>
-                <option value="all">All</option>
-                <option value="goals">Goals</option>
-                <option value="passes">Passes</option>
-                <option value="shots">Shots</option>
-                <option value="second_balls">Second balls</option>
-                <option value="set_pieces">Set pieces</option>
-                <option value="discipline">Discipline</option>
-                <option value="stoppages">Stoppages</option>
-            </select>
-        </label>
-        <span class="seed">Seed {String(simulation.seed).padStart(10, '0')}</span>
-        <div class="timeline">
-            <input
-                type="range"
-                min="0"
-                max={snapshots.length - 1}
-                bind:value={index}
-                on:input={scrub}
-                aria-label="Timeline"
-            >
-            <div class="goal-markers">
-                {#each allGoals as goal, goalIndex}
-                    <button
-                        type="button"
-                        class:active={goalIndex === selectedGoalIndex}
-                        style:left={`${goal.time / timelineEndTime * 100}%`}
-                        on:click={() => jumpToGoal(goalIndex)}
-                        aria-label={`Goal ${goalIndex + 1} at ${formatTime(goal.time)}`}
-                    ></button>
-                {/each}
-            </div>
-        </div>
-    </section>
-
-    <Pitch {snapshot} {selectedPlayerId} on:selectPlayer={selectPlayer} />
-
-    <section class="match-report" aria-label="Match report">
-        <dl>
-            <div>
-                <dt>Avg possession</dt>
-                <dd>{formatDecimal(report.match.averagePossessionPasses)}</dd>
-            </div>
-            <div>
-                <dt>Longest</dt>
-                <dd>{report.match.longestPossession}</dd>
-            </div>
-            <div>
-                <dt>Owned</dt>
-                <dd>{formatPercent(report.match.ballOwnedShare)}</dd>
-            </div>
-            <div>
-                <dt>Loose</dt>
-                <dd>{formatPercent(report.match.looseBallShare)}</dd>
-            </div>
-            <div>
-                <dt>Possession</dt>
-                <dd>#{snapshot.possession.id}</dd>
-            </div>
-            <div>
-                <dt>Passes</dt>
-                <dd>{snapshot.possession.passCount}</dd>
-            </div>
-            <div>
-                <dt>Zone</dt>
-                <dd>{diagnosticLabel(snapshot.fieldZones[0])}</dd>
-            </div>
-            <div>
-                <dt>Pattern</dt>
-                <dd>{diagnosticLabel(snapshot.activeAttackPattern)}</dd>
-            </div>
-            <div>
-                <dt>Last pass</dt>
-                <dd>{diagnosticLabel(snapshot.possession.lastSuccessfulPassRoute)}</dd>
-            </div>
-            <div>
-                <dt>Chance</dt>
-                <dd>{formatChance(recentShot?.chanceQuality)}</dd>
-            </div>
-            <div>
-                <dt>Final third</dt>
-                <dd>{report.match.finalThirdEntries}</dd>
-            </div>
-            <div>
-                <dt>Box entries</dt>
-                <dd>{report.match.boxEntries}</dd>
-            </div>
-        </dl>
-        <table>
-            <thead>
-                <tr>
-                    <th>Restart</th>
-                    <th>Awards</th>
-                    <th>Exec</th>
-                </tr>
-            </thead>
-            <tbody>
-                {#each Object.entries(report.match.restarts) as [type, restarts]}
-                    <tr>
-                        <th>{restartLabel(type)}</th>
-                        <td>{restarts.awards}</td>
-                        <td>{restarts.executions}</td>
-                    </tr>
-                {/each}
-            </tbody>
-        </table>
-        <table>
-            <thead>
-                <tr>
-                    <th>Pass route</th>
-                    <th>Count</th>
-                </tr>
-            </thead>
-            <tbody>
-                {#each passRouteEntries as [route, count]}
-                    <tr>
-                        <th>{diagnosticLabel(route)}</th>
-                        <td>{count}</td>
-                    </tr>
-                {/each}
-            </tbody>
-        </table>
-        <table>
-            <thead>
-                <tr>
-                    <th>Shot route</th>
-                    <th>Count</th>
-                </tr>
-            </thead>
-            <tbody>
-                {#each shotRouteEntries as [route, count]}
-                    <tr>
-                        <th>{diagnosticLabel(route)}</th>
-                        <td>{count}</td>
-                    </tr>
-                {/each}
-            </tbody>
-        </table>
-        <div class="shot-map" aria-label="Shot map">
-            {#each shotEvents as shot}
-                <span
-                    style:left={`${pitchX(shot.position.x)}%`}
-                    style:top={`${pitchY(shot.position.y)}%`}
-                    title={`${diagnosticLabel(shot.outcome)} ${formatChance(shot.chanceQuality)}`}
-                ></span>
-            {/each}
-        </div>
-        <div class="route-summary">
-            <span>Cross {report.match.crosses.completed}/{report.match.crosses.attempted}</span>
-            <span>Cutback {report.match.cutbacks.completed}/{report.match.cutbacks.attempted}</span>
-            <span>Through {report.match.throughBalls.completed}/{report.match.throughBalls.attempted}</span>
-            <span>Switch {report.match.switches.completed}/{report.match.switches.attempted}</span>
-        </div>
-    </section>
-
-    {#if allGoals[selectedGoalIndex]}
-        <section class="goal-context" aria-label="Goal context">
-            <dl>
-                <div>
-                    <dt>Goal route</dt>
-                    <dd>{diagnosticLabel(allGoals[selectedGoalIndex].outcome?.replace(/_goal$/, ''))}</dd>
-                </div>
-                <div>
-                    <dt>Possession</dt>
-                    <dd>#{allGoals[selectedGoalIndex].possession.id}</dd>
-                </div>
-                <div>
-                    <dt>Passes</dt>
-                    <dd>{allGoals[selectedGoalIndex].possession.passCount}</dd>
-                </div>
-                <div>
-                    <dt>Chance</dt>
-                    <dd>{formatChance(allGoals[selectedGoalIndex].chanceQuality)}</dd>
-                </div>
-            </dl>
+<main class="game-shell">
+    <div class="game-board">
+        <section class="panel pitch-panel" aria-label="Live match pitch">
+            <Pitch {snapshot} {selectedPlayerId} on:selectPlayer={selectPlayer} />
         </section>
-    {/if}
 
-    {#if matchStory}
-        <section class="story-report" aria-label="Match story">
-            <h2>{matchStory.headline}</h2>
-            <p>{matchStory.summary}</p>
-            <div class="story-report__sections">
-                {#each matchStory.sections as section}
-                    <article>
-                        <h3>{section.title}</h3>
-                        <p>{section.text}</p>
-                    </article>
-                {/each}
+        <aside class="panel match-rail" aria-label="Live match score and events">
+            <div class="match-clock">
+                <span>{matchStatus(snapshot)}</span>
+                <small>{snapshot.period === 'ended' ? 'Match complete' : `Period ${snapshot.period}`}</small>
             </div>
-            {#if matchStory.turningPoints.length}
-                <ol>
-                    {#each matchStory.turningPoints as point}
-                        <li>
-                            <span>{formatTime(point.time || 0)}</span>
-                            <strong>{point.title}</strong>
-                            <p>{point.text}</p>
-                        </li>
+
+            <div class="scoreline" aria-label={`${simulation.homeTeam.name} ${snapshot.score.home}, ${simulation.awayTeam.name} ${snapshot.score.away}`}>
+                <span>{teamAbbreviation(simulation.homeTeam.name)}</span>
+                <strong>{snapshot.score.home} — {snapshot.score.away}</strong>
+                <span>{teamAbbreviation(simulation.awayTeam.name)}</span>
+            </div>
+
+            <div class="phase"><span></span>{phaseLabel(snapshot.phase)}</div>
+
+            <ol class="live-events" aria-label="Latest notable events">
+                {#each recentEvents as event}
+                    <li>
+                        <time>{Math.floor(event.time / 60)}'</time>
+                        <span class:home={event.teamSide === 'home'} class:away={event.teamSide === 'away'} class="event-dot"></span>
+                        <div>
+                            <strong>{eventLabel(event)}</strong>
+                            <small>{eventDetail(event)}</small>
+                        </div>
+                    </li>
+                {:else}
+                    <li class="empty-event">
+                        <time>00'</time>
+                        <span class="event-dot home"></span>
+                        <div>
+                            <strong>Waiting for kickoff</strong>
+                            <small>The match is ready</small>
+                        </div>
+                    </li>
+                {/each}
+            </ol>
+
+            <div class="rail-metric possession-metric">
+                <div class="metric-label">
+                    <span>Possession</span>
+                    <span>{Math.round(homePossession * 100)} / {Math.round((1 - homePossession) * 100)}</span>
+                </div>
+                <div class="possession-bar" aria-hidden="true">
+                    <span style:width={`${homePossession * 100}%`}></span>
+                </div>
+            </div>
+
+            <div class="rail-metric momentum-metric">
+                <div class="metric-label"><span>Momentum</span><span>Last 22 events</span></div>
+                <div class="momentum-bars" aria-hidden="true">
+                    {#each momentumEvents as event, eventIndex}
+                        <span
+                            class:away={event.teamSide === 'away'}
+                            style:height={`${32 + ((eventIndex * 17) % 58)}%`}
+                        ></span>
                     {/each}
-                </ol>
-            {/if}
+                </div>
+            </div>
+        </aside>
+
+        <section class="support-grid" aria-label="Match analysis">
+            <article class="panel timeline-card">
+                <header>
+                    <h2>Events</h2>
+                    <span>{goals.length} {goals.length === 1 ? 'goal' : 'goals'}</span>
+                </header>
+                <div class="timeline-visual">
+                    <div class="timeline-scale"><span>0'</span><span>HT</span><span>FT</span></div>
+                    <div class="timeline-line">
+                        {#each goals as goal, goalIndex}
+                            <button
+                                type="button"
+                                class="goal-marker"
+                                class:away={goal.teamSide === 'away'}
+                                style:left={`${goal.time / timelineEndTime * 100}%`}
+                                aria-label={`Jump to goal at ${formatTime(goal.time)}`}
+                                on:click={() => jumpToGoal(goalIndex)}
+                            >●</button>
+                        {/each}
+                        <span class="current-marker" style:left={`${snapshot.time / timelineEndTime * 100}%`}></span>
+                    </div>
+                    <input
+                        class="timeline-input"
+                        type="range"
+                        min="0"
+                        max={snapshots.length - 1}
+                        bind:value={index}
+                        on:input={scrub}
+                        aria-label="Match timeline"
+                    >
+                    <strong>{matchStatus(snapshot)}</strong>
+                </div>
+            </article>
+
+            <article class="panel intent-card">
+                <header>
+                    <h2>Player intent</h2>
+                    <span>{selectedPlayer?.currentIntent.type.replace(/_/g, ' ')}</span>
+                </header>
+                <div class="intent-visual">
+                    <div class="selected-player-badge">
+                        <strong>{selectedPlayer?.playerNumber}</strong>
+                        <span>{selectedPlayer?.playerName}</span>
+                    </div>
+                    <svg viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+                        <defs>
+                            <marker id="intent-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                                <path d="M0,0 L6,3 L0,6 Z"></path>
+                            </marker>
+                        </defs>
+                        <path d={`M24 30 Q48 ${intentTarget.y} ${intentTarget.x} ${intentTarget.y}`} marker-end="url(#intent-arrow)"></path>
+                        <circle cx={intentTarget.x} cy={intentTarget.y} r="3"></circle>
+                    </svg>
+                </div>
+            </article>
+
+            <article class="panel shape-card">
+                <header>
+                    <h2>Match shape</h2>
+                    <span>{snapshot.possession.teamSide ? `${snapshot.possession.teamSide} ball` : 'contested'}</span>
+                </header>
+                <div class="shape-visual" aria-label="Current team shapes">
+                    <div class="mini-pitch">
+                        {#each snapshot.players.filter((player) => player.teamSide === 'home') as player}
+                            <span class="home" style:left={`${pitchX(player.x)}%`} style:top={`${pitchY(player.y)}%`}></span>
+                        {/each}
+                    </div>
+                    <div class="shape-divider"></div>
+                    <div class="mini-pitch">
+                        {#each snapshot.players.filter((player) => player.teamSide === 'away') as player}
+                            <span class="away" style:left={`${100 - pitchX(player.x)}%`} style:top={`${pitchY(player.y)}%`}></span>
+                        {/each}
+                    </div>
+                </div>
+            </article>
         </section>
-    {/if}
 
-    <section class="inspector" aria-label="Selected player">
-        <div>
-            <strong>{selectedPlayer?.playerName || 'Loose ball'}</strong>
-            <span>
-                {selectedPlayer
-                    ? `${selectedPlayer.teamSide.toUpperCase()} #${selectedPlayer.playerNumber} ${selectedPlayer.roleName}`
-                    : 'No player in possession'}
-            </span>
-        </div>
-        <dl>
-            <div>
-                <dt>Intent</dt>
-                <dd>{selectedPlayer ? selectedPlayer.currentIntent.type.replace(/_/g, ' ') : '—'}</dd>
-            </div>
-            <div>
-                <dt>Target</dt>
-                <dd>{selectedPlayer ? `${Math.round(selectedPlayer.target.x)}, ${Math.round(selectedPlayer.target.y)}` : '—'}</dd>
-            </div>
-            <div>
-                <dt>Intent target</dt>
-                <dd>
-                    {selectedPlayer
-                        ? `${Math.round(selectedPlayer.currentIntent.target.x)}, ${Math.round(selectedPlayer.currentIntent.target.y)}`
-                        : '—'}
-                </dd>
-            </div>
-            <div>
-                <dt>Stamina</dt>
-                <dd>{selectedPlayer ? `${Math.round(selectedPlayer.stamina)}%` : '—'}</dd>
-            </div>
-            <div>
-                <dt>Cards</dt>
-                <dd>{selectedPlayer ? `${selectedPlayer.yellowCards}${selectedPlayer.redCard ? 'R' : ''}` : '—'}</dd>
-            </div>
-            <div>
-                <dt>Fouls</dt>
-                <dd>{selectedPlayer ? `${selectedPlayer.foulsCommitted}/${selectedPlayer.foulsSuffered}` : '—'}</dd>
-            </div>
-            <div>
-                <dt>Injury</dt>
-                <dd>{selectedPlayer?.injurySeverity || '—'}</dd>
-            </div>
-        </dl>
-    </section>
-
-    <section class="events" aria-label="Recent events">
-        <h2>Recent events</h2>
-        <ol>
-            {#each filteredEvents.slice(-8).reverse() as event}
-                <li>
-                    <span>{formatTime(event.time)}</span>
-                    <strong>{eventLabel(event)}</strong>
-                </li>
-            {/each}
-        </ol>
-    </section>
-
-    <section class="teams">
-        <TeamReport team={simulation.homeTeam} report={report.home} />
-        <TeamReport team={simulation.awayTeam} report={report.away} />
-    </section>
+        <footer class="panel control-bar" aria-label="Match controls">
+            <button id="play-button" type="button" class="icon-control" on:click={togglePlay}>
+                <span aria-hidden="true">{playing ? 'Ⅱ' : '▶'}</span>
+                <span>{playing ? 'Pause' : 'Play'}</span>
+            </button>
+            <span class="control-divider"></span>
+            <button id="new-match" type="button" on:click={newMatch}>New match</button>
+            <span class="control-divider"></span>
+            <label>
+                <span>Speed</span>
+                <select bind:value={speed} aria-label="Match speed">
+                    <option value={1}>1x</option>
+                    <option value={5}>5x</option>
+                    <option value={15}>15x</option>
+                    <option value={45}>45x</option>
+                    <option value={90}>90x</option>
+                    <option value={180}>180x</option>
+                </select>
+            </label>
+            <span class="control-divider"></span>
+            <span class="seed">Seed {String(simulation.seed).padStart(10, '0')}</span>
+            <button type="button" class="fullscreen-control" on:click={() => void toggleFullscreen()}>
+                {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} <kbd>F</kbd>
+            </button>
+        </footer>
+    </div>
 </main>

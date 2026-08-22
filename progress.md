@@ -28,3 +28,32 @@ Original prompt: Alright cool. Let's fix those two
 ## TODO
 
 - None.
+
+---
+
+## Current objective
+
+Original prompt: I'm sold. Let's build the game. Feel free to use three-js if it makes things better/easier/cooler.
+
+## Editorial game progress
+
+- Audited the current Svelte demo, real-time simulation state, deployment constraints, and visual reference.
+- Chose native Svelte, CSS, and SVG over Three.js because the approved direction is flat, editorial, and data-driven.
+- Replaced the long diagnostic page with a full-screen live match board driven by the existing simulator state.
+- Preserved seeded matches, playback speed, timeline scrubbing, goal jumps, player selection, and fullscreen controls.
+- Added deterministic `window.render_game_to_text` and `window.advanceTime` hooks for browser-game verification.
+- The first required Playwright game-client run produced live screenshots and state payloads with no reported console errors.
+- Browser inspection caught a short-viewport overflow and future-goal timeline spoiler; both were corrected.
+- A stable play-then-pause scenario confirmed the visual state and `render_game_to_text` agree, with no console-error artifact.
+- Tightened the score rail and supporting modules so the entire board remains legible at the client's 1280x720 viewport.
+- Fixed hidden Svelte dependencies that let event panels advance while leaving the visible clock and phase label stale.
+- Direct browser QA verified speed changes, live playback, pausing, player selection, and scrub-to-full-time with a real 1–1 result.
+- Restored goal-marker accessibility after finding that their decorative timeline parent hid the interactive buttons from the accessibility tree.
+- Raised goal markers above the transparent scrubber so they remain clickable without reducing the timeline hit target.
+
+## Editorial game verification
+
+- Confirmed the 390px layout has no horizontal overflow and keeps the pitch, score rail, analysis cards, and sticky controls readable.
+- Confirmed goal jumps, timeline scrubbing, player selection, playback, seeded match resets, and fullscreen controls against `render_game_to_text` state.
+- Ran the required web-game Playwright client after the final interaction fix; its screenshot and paused simulation state agree, with no console-error artifact.
+- Passed `npm run typecheck`, `npm test`, `npm run build`, `npm run demo:build`, and `git diff --check`.
